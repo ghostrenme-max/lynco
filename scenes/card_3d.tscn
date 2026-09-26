@@ -1,0 +1,55 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Texture2D" path="res://asset/card_back_white.png" id="BackTexture"]
+
+[sub_resource type="StandardMaterial3D" id="Paper"]
+albedo_color = Color(0.92, 0.91, 0.87, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BodyMesh"]
+size = Vector3(1.46, 0.025, 2.12)
+material = SubResource("Paper")
+
+[sub_resource type="PlaneMesh" id="FaceMesh"]
+size = Vector2(1.48, 2.14)
+
+
+[sub_resource type="StandardMaterial3D" id="BackMaterial"]
+shading_mode = 0
+albedo_texture = ExtResource("BackTexture")
+
+[sub_resource type="PlaneMesh" id="BackMesh"]
+size = Vector2(1.48, 2.14)
+material = SubResource("BackMaterial")
+
+[sub_resource type="Shader" id="ContactShader"]
+code = "shader_type spatial; render_mode unshaded, cull_disabled, depth_draw_never; void fragment(){vec2 p=abs(UV-0.5)-vec2(0.39,0.41); float d=length(max(p,vec2(0.0)))+min(max(p.x,p.y),0.0)-0.025; ALBEDO=vec3(0.12,0.10,0.07); ALPHA=(1.0-smoothstep(-0.01,0.075,d))*0.25;}"
+
+[sub_resource type="ShaderMaterial" id="ContactMaterial"]
+shader = SubResource("ContactShader")
+
+[sub_resource type="PlaneMesh" id="ContactMesh"]
+size = Vector2(1.8,2.46)
+material = SubResource("ContactMaterial")
+
+[node name="Card3D" type="Node3D"]
+
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("BodyMesh")
+cast_shadow = 1
+
+[node name="Front" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.014, 0)
+mesh = SubResource("FaceMesh")
+cast_shadow = 0
+
+[node name="Back" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.014, 0)
+rotation = Vector3(3.1415927, 0, 0)
+mesh = SubResource("BackMesh")
+cast_shadow = 0
+
+[node name="ContactShadow" type="MeshInstance3D" parent="."]
+position = Vector3(0.06,-0.053,0.08)
+mesh = SubResource("ContactMesh")
+cast_shadow = 0

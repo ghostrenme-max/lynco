@@ -1,0 +1,13 @@
+.godot/
+*.tmp
+test-results/
+
+# Local Windows metadata
+desktop.ini
+Thumbs.db
+# Local credentials and export presets
+.env
+.env.*
+!.env.example
+export_credentials.cfg
+

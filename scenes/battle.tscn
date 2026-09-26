@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/battle_ui.gd" id="UI"]
+[ext_resource type="PackedScene" path="res://scenes/table_world.tscn" id="Table"]
+
+[node name="LYNCO" type="Node3D"]
+
+[node name="TableWorld" parent="." instance=ExtResource("Table")]
+
+[node name="Interface" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("UI")
