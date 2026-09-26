@@ -12,7 +12,7 @@ config_version=5
 
 config/name="린코 LYNCO"
 config/description="카드 전투 · UI 및 드로우 프로토타입"
-run/main_scene="res://scenes/battle.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icons/enemy.png"
 

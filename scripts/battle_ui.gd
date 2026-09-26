@@ -55,6 +55,8 @@ var inspector_root: Control
 var inspector_card: Panel
 var inspector_styles: Dictionary = {}
 var inspector_open: bool = false
+var menu_button: Button
+var leaving_battle: bool = false
 var end_button: Button
 var reset_button: Button
 var draw_button: Button
@@ -179,6 +181,9 @@ func _icon(parent: Node, key: String, pos: Vector2, box: Vector2, white: bool = 
 
 func _build_ui() -> void:
  _build_card_inspector()
+ menu_button = _button(stage,"← 메인으로",Vector2(34,24),Vector2(170,42))
+ menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
+ menu_button.pressed.connect(_return_to_main)
 
  end_button = _button(stage,"턴 종료    →",Vector2(1260,552),Vector2(306,53),true)
  end_button.pressed.connect(_end_turn)
@@ -481,6 +486,7 @@ func _sync_ui() -> void:
  discard_label.text="버림  %d" % model.discard.size()
  exhaust_label.text="소멸  %d" % model.exhausted.size()
  hand_label.text="HAND  %d / 7" % model.hand.size()
+ menu_button.disabled=busy or leaving_battle
  end_button.disabled=busy or model.finished
  end_button.text="연출 진행 중…" if busy else "턴 종료    →"
  reset_button.disabled=busy;draw_button.disabled=busy or model.finished or model.hand.size()>=7
@@ -1160,3 +1166,16 @@ func _verify_inspector() -> void:
  assert(state==JSON.stringify([model.hand,model.energy,model.turn,model.discard]))
  print("LYNCO_INSPECTOR_TEST_PASS right_click center dark_white modal_input close resize nodes_stable camera")
  get_tree().quit()
+# Leave only between animations so no suspended combat continuation outlives its scene.
+func _return_to_main() -> void:
+ if leaving_battle or busy or inspector_open or looking or drag_uid >= 0 or press_uid >= 0 or help_panel.visible: return
+ leaving_battle = true
+ menu_button.disabled = true
+ _close_inspector()
+ _stop_look(false)
+ _cancel_drag()
+ var error: Error = get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+ if error != OK:
+  leaving_battle = false
+  _sync_ui()
+  _toast("메인 화면을 열지 못했습니다")
