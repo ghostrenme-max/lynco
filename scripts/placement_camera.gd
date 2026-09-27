@@ -36,7 +36,7 @@ func _process(delta: float) -> void:
   returning=false
   var offset:=Vector2(clampf((local.x-800.0)/780.0,-1,1),clampf((local.y-405.0)/225.0,-1,1))
   var target:=saved
-  target.origin-=saved.basis.z*3.0
+  target.origin-=saved.basis.z*4.5
   target.origin+=saved.basis.x*offset.x*3.8
   target.origin+=Vector3(0,0,offset.y*1.2)
   target.basis=saved.basis*Basis(Vector3.UP,-offset.x*0.08)*Basis(Vector3.RIGHT,-offset.y*0.045)
