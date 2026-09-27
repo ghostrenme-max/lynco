@@ -35,7 +35,7 @@ static func back_card(id: String) -> Dictionary:
   _back_definitions[id] = {
    "name": ("킹" if identity == "king" else "조커") if special else str(front.name) + "′",
    "cost":0, "cost_label":"—", "icon":identity if special else front.icon,
-   "kind":str(front.name) + "의 뒷면", "dark":true,
+   "kind":str(front.name) + "의 뒷면", "dark":bool(front.dark),
    "text":"정체 공개\n효과 미정",
    "detail":str(front.name) + "의 고정된 뒷면입니다.\n현재는 정체 공개만 확인합니다.\n효과와 비용은 적용하지 않습니다.",
    "effect":"pending_back", "value":0, "identity":identity,

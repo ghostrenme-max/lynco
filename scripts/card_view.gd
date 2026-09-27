@@ -150,7 +150,7 @@ func set_hand_focus(focused_uid: int, animate: bool = true) -> void:
 func set_selected(value: bool) -> void:
  if selected == value: return
  selected = value
- outline_style.border_color = Color("d9b91b") if selected else (Color("383b37") if bool(data.dark) or concealed else Color("c5c8c1"))
+ outline_style.border_color = Color("d9b91b") if selected else (Color("383b37") if bool(data.dark) else Color("c5c8c1"))
  outline_style.set_border_width_all(2 if selected else 1)
  if not locked: update_pose()
 
@@ -175,13 +175,16 @@ func stop_motion() -> void:
  if movement and movement.is_valid(): movement.kill()
 
 
-func conceal(common_texture: Texture2D) -> void:
+func conceal(common_texture: Texture2D, ink_material: ShaderMaterial) -> void:
  concealed = true
- # Identical cover, body, scale and cursor prevent colour/cost identity leaks.
+ # Keep card colour visible while concealing its name, cost and reverse identity.
  back_logo.texture = common_texture
- back_logo.material = BLACK_BACK_MATERIAL
- outline_style.bg_color = Color("181a19")
- outline_style.border_color = Color("383b37")
+ back_logo.material = ink_material
+ back_logo.size = Vector2(123,123)
+ back_logo.position = (CARD_SIZE-back_logo.size)*0.5
+ back_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+ outline_style.bg_color = Color("181a19") if bool(data.dark) else Color("fefefb")
+ outline_style.border_color = Color("383b37") if bool(data.dark) else Color("c5c8c1")
  outline_style.set_border_width_all(1)
  set_face_up(false)
  set_available(true, "")

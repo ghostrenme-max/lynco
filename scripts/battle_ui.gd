@@ -112,6 +112,7 @@ func _ready() -> void:
   textures[key] = load("res://assets/icons/%s.png" % key)
  textures["back_white"] = load("res://asset/front_logo_white.png")
  textures["back_black"] = load("res://asset/black_back_logo_red.png")
+ textures["shift_reverse"] = load("res://assets/icons/shift_reverse.png")
  # Measure visible artwork once; share the normalized logo across all back views.
  for back_key in ["back_white", "back_black"]:
   var logo_image:Image=textures[back_key].get_image()
@@ -533,7 +534,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
   var revealed := Card.new()
   var definition: Dictionary = Catalog.back_card(str(result.entry.id))
   hand_layer.add_child(revealed)
-  revealed.setup(result.entry,definition,Symbols.texture_for(definition),light_ink,textures["back_black"])
+  revealed.setup(result.entry,definition,Symbols.texture_for(definition),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
   revealed.position=view.position;revealed.rotation=view.rotation;revealed.scale=view.scale
   view.stop_motion();view.queue_free();view=revealed
  views.erase(uid); view.stop_motion(); view.locked=true; view.z_index=55
@@ -1393,7 +1394,7 @@ func _shift_requested() -> void:
  var gather := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
  for view in shuffled_views:
   view.stop_motion();view.locked=true;view.set_selected(false)
-  view.conceal(textures["back_black"])
+  view.conceal(textures["shift_reverse"],light_ink if bool(view.data.dark) else dark_ink)
   view.z_index=90
   gather.tween_property(view,"position",center,0.10 if reduced_motion else 0.22)
   gather.tween_property(view,"rotation",0.0,0.16)

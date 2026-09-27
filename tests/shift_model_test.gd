@@ -3,6 +3,13 @@ const Model = preload("res://scripts/battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 
 func _initialize() -> void:
+ for deck in preload("res://scripts/collection_session.gd").DECKS.values():
+  var white_count:=0
+  for id in deck.cards:
+   if not bool(Catalog.card(id).dark):white_count+=1
+   assert(Catalog.back_card(id).dark==Catalog.card(id).dark)
+  var ratio: float=float(white_count)/deck.cards.size()
+  assert(ratio>=0.7 and ratio<=0.8)
  for seed_value in range(250):
   var a = Model.new()
   var b = Model.new()

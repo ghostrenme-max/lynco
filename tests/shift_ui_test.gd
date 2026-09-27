@@ -50,8 +50,11 @@ func _run() -> void:
  initial.sort();shuffled.sort();assert(initial==shuffled)
  for view in ui.views.values():
   assert(view.concealed and not view.face_up)
-  assert(view.back_logo.texture==ui.textures.back_black)
-  assert(view.outline_style.bg_color==Color("181a19"))
+  assert(view.back_logo.texture==ui.textures.shift_reverse)
+  assert(view.outline_style.bg_color==(Color("181a19") if bool(view.data.dark) else Color("fefefb")))
+  assert(view.back_logo.material==(ui.light_ink if bool(view.data.dark) else ui.dark_ink))
+  assert(view.back_logo.size==Vector2(123,123))
+  assert((view.back_logo.position+view.back_logo.size*0.5).is_equal_approx(ui.Card.CARD_SIZE*0.5))
   assert(view.reason_label.text.is_empty())
   for item in view.face_nodes:assert(not item.visible)
  await _capture("shift_hidden_1440")
@@ -128,7 +131,7 @@ func _run() -> void:
   var placed: Node=ui.table.cards.values()[-1]
   assert(ui.Catalog.back_identity(str(placed.get_meta("card_id")))==identity)
   ui._inspect_placed(str(placed.get_meta("card_id")),true)
-  assert(ui.preview_icon.texture==ui.Symbols.SPECIAL[identity][1])
+  assert(ui.preview_icon.texture==ui.Symbols.SPECIAL[identity][0])
   assert(ui.preview_icon.material==null)
   await _capture("shift_"+identity+"_revealed")
   ui._close_inspector()

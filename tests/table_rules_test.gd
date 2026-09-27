@@ -50,7 +50,9 @@ func _initialize() -> void:
  var model := Model.new(); model.reset(42)
  var counts: Dictionary = {}
  for entry in model.deck: counts[entry.id]=int(counts.get(entry.id,0))+1
- check(counts.link==4 and model.total_cards==18,"full deck used")
+ var expected_counts: Dictionary = {}
+ for id in Session.DECKS.remnant.cards:expected_counts[id]=int(expected_counts.get(id,0))+1
+ check(counts==expected_counts and model.total_cards==18,"full equipped deck used")
  model.fill_hand(); model.conceal_and_shuffle()
  var gold_before: int = Session.gold
  var uid: int = model.hand[0].uid
