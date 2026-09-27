@@ -471,9 +471,6 @@ func _animate_draw(drawn: Array) -> void:
 
 func _select_card(uid: int) -> void:
  if inspector_open or busy or model.finished or help_panel.visible:return
- if model.is_concealed(uid):
-  _activate_card(uid)
-  return
  selected_uid=uid
  for id in views:views[id].set_selected(id==uid)
  _inspect(uid)
@@ -520,6 +517,9 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  if inspector_open or busy or drag_uid>=0 or help_panel.visible:return
  var reason:=model.unavailable_reason(uid)
  if not reason.is_empty():_toast(reason);return
+ if cell==Table.INVALID and model.is_concealed(uid):
+  _select_card(uid)
+  return
  if cell==Table.INVALID:cell=table.next_cell()
  if not table.free_cell(cell):_toast("빈 테이블 칸에 놓아주세요");return
  table.select_influence(Table.INVALID)
@@ -619,7 +619,7 @@ func _sync_ui() -> void:
  discard_label.text="버림  %d" % model.discard.size()
  exhaust_label.text="소멸  %d" % model.exhausted.size()
  hand_label.text="%d / %d" % [model.hand.size(),model.total_cards]
- hand_hint.text="가린 카드 클릭 · 뒷면 정체 공개" if model.hand.any(func(entry):return bool(entry.get("concealed",false))) else "우클릭 상세 · 드래그 배치"
+ hand_hint.text="가린 카드 선택 후 빈 칸 클릭 · 드래그 배치" if model.hand.any(func(entry):return bool(entry.get("concealed",false))) else "우클릭 상세 · 드래그 배치"
  _sync_identity_counter()
  fill_button.disabled=busy or model.finished or model.hand.size()>=5
  shift_button.disabled=busy or model.finished or model.hand.is_empty()
@@ -906,6 +906,11 @@ func _input(event: InputEvent) -> void:
   if is_instance_valid(inventory_layer) and event.keycode==KEY_ESCAPE:
    _toggle_inventory();get_viewport().set_input_as_handled();return
  if is_instance_valid(inventory_layer):return
+ if is_instance_valid(table) and table.card_focus_active and event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
+  table.select_influence(Table.INVALID)
+  press_uid=-1
+  get_viewport().set_input_as_handled()
+  return
  if is_instance_valid(table) and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE and event.pressed:
   if not busy and not inspector_open and drag_uid<0 and press_uid<0 and not help_panel.visible:
    _stop_look();_hide_hover_direction();camera_keys.clear()
@@ -919,7 +924,7 @@ func _input(event: InputEvent) -> void:
   elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
    table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0),event.position)
   elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
-   table.select_influence(table.cell_at(stage.get_global_transform_with_canvas().affine_inverse()*event.position))
+   table.click_influence(table.cell_at(stage.get_global_transform_with_canvas().affine_inverse()*event.position))
   get_viewport().set_input_as_handled()
   return
  if event is InputEventKey:
@@ -953,7 +958,7 @@ func _input(event: InputEvent) -> void:
   var hand_uid:int=_hand_card_at(point)
   if hand_uid>=0:
    if model.is_concealed(hand_uid):
-    _toast("가려진 카드입니다 · 선택하면 정체가 공개됩니다")
+    _toast("가려진 카드입니다 · 배치하면 정체가 공개됩니다")
     get_viewport().set_input_as_handled();return
    _inspect(hand_uid,true)
    _show_inspector(Catalog.table_card(model.hand[model.find_card(hand_uid)].id))
@@ -985,7 +990,13 @@ func _input(event: InputEvent) -> void:
     var cell:Vector2i=table.cell_at(press_point)
     if cell!=Table.INVALID:
      _hide_hover_direction()
-     table.select_influence(cell)
+     if table.cards.has(cell):
+      selected_uid=-1
+      for view in views.values():view.set_selected(false)
+      table.click_influence(cell)
+     elif selected_uid>=0:
+      _activate_card(selected_uid,cell)
+     else:table.click_influence(cell)
      get_viewport().set_input_as_handled()
   else:
    press_uid=-1
@@ -1412,7 +1423,7 @@ func _shift_requested() -> void:
  await deal.finished
  for view in shuffled_views: view.locked=false;view.z_index=0
  shuffle_phase="idle";busy=false;_sync_ui()
- _toast("가린 카드 클릭 · 뒷면 정체 공개")
+ _toast("가린 카드 선택 후 빈 칸 클릭 · 드래그 배치")
 
 
 func _hide_hover_direction() -> void:

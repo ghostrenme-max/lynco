@@ -39,6 +39,8 @@ var hovered_cell := INVALID
 var owner_line_mesh: PlaneMesh
 var owner_dash_mesh: PlaneMesh
 var owner_line_material: StandardMaterial3D
+var opponent_mark_material: StandardMaterial3D
+var opponent_side_mesh: PlaneMesh
 var battle_grid: MeshInstance3D
 var mirror_grid: MeshInstance3D
 var battle_grid_material: ShaderMaterial
@@ -60,7 +62,11 @@ func _ready() -> void:
  direction_material=ShaderMaterial.new()
  direction_material.shader=preload("res://asset/card_direction_tab.gdshader")
  owner_line_mesh=PlaneMesh.new();owner_line_mesh.size=Vector2(0.74,0.035)
- owner_dash_mesh=PlaneMesh.new();owner_dash_mesh.size=Vector2(0.13,0.035)
+ owner_dash_mesh=PlaneMesh.new();owner_dash_mesh.size=Vector2(0.21,0.075)
+ opponent_side_mesh=PlaneMesh.new();opponent_side_mesh.size=Vector2(0.065,1.65)
+ opponent_mark_material=StandardMaterial3D.new()
+ opponent_mark_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+ opponent_mark_material.albedo_color=Color("ff655c")
  owner_line_material=StandardMaterial3D.new()
  owner_line_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
  owner_line_material.albedo_color=Color("dddeda")
@@ -159,12 +165,13 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
  back_materials[id]=material
 
 func look_by(relative: Vector2) -> void:
- if opponent_view or top_view:return
+ if opponent_view or top_view or card_focus_active:return
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
 
 func reset_look() -> void:
+ select_influence(INVALID)
  if top_view:set_top_view(false)
  if camera_transition and camera_transition.is_valid():camera_transition.kill()
  opponent_view=false
@@ -186,7 +193,7 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
   holder.add_child(arrow)
 
 func pan_by(direction: Vector2, delta: float) -> void:
- if opponent_view or top_view:return
+ if opponent_view or top_view or card_focus_active:return
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
@@ -198,9 +205,7 @@ func mark_owner(cell: Vector2i, owner: String) -> void:
  _refresh_battle_grid()
 
 func _label_owner(holder: Node3D, owner: String) -> void:
- var previous: String=str(holder.get_meta("owner","player"))
  holder.set_meta("owner",owner)
- if previous!=owner:holder.rotation.y+=PI
  if owner=="opponent":
   _ensure_fan()
   holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
@@ -209,16 +214,25 @@ func _label_owner(holder: Node3D, owner: String) -> void:
  if existing:
   holder.remove_child(existing);existing.queue_free()
  var mark:=Node3D.new();mark.name="OwnerMark";holder.add_child(mark)
- var inverted: bool=(owner=="opponent") != bool(holder.get_meta("mirror",false))
+ var inverted: bool=bool(holder.get_meta("mirror",false))
  mark.position=Vector3(0,-0.025,-1.17 if inverted else 1.17)
  var segments: int=4 if owner=="opponent" else 1
  for i in range(segments):
   var line:=MeshInstance3D.new()
   line.mesh=owner_dash_mesh if owner=="opponent" else owner_line_mesh
-  line.material_override=_far_material(owner_line_material) if bool(holder.get_meta("mirror",false)) else owner_line_material
+  var material: StandardMaterial3D=opponent_mark_material if owner=="opponent" else owner_line_material
+  line.material_override=_far_material(material) if bool(holder.get_meta("mirror",false)) else material
   line.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-  line.position.x=(float(i)-1.5)*0.20 if owner=="opponent" else 0.0
+  line.position.x=(float(i)-1.5)*0.29 if owner=="opponent" else 0.0
   mark.add_child(line)
+ if owner=="opponent":
+  var side:=MeshInstance3D.new()
+  side.name="OwnerSide"
+  side.mesh=opponent_side_mesh
+  side.material_override=_far_material(opponent_mark_material) if inverted else opponent_mark_material
+  side.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  side.position=Vector3(-0.84,0,-mark.position.z)
+  mark.add_child(side)
 
 func set_hover_card(cell: Vector2i) -> void:
  if hovered_cell==cell:return
@@ -268,9 +282,7 @@ func _track(tween: Tween) -> void:
 
 func _flight_pose(t: float, holder: Node3D, start: Vector3, finish: Vector3, start_rotation: Vector3, end_rotation: Vector3, height: float) -> void:
  holder.position=start.lerp(finish,t)+Vector3.UP*sin(PI*t)*height
- var final_rotation: Vector3=end_rotation
- if str(holder.get_meta("owner","player"))=="opponent":final_rotation.y+=PI
- holder.rotation=start_rotation.lerp(final_rotation,t)
+ holder.rotation=start_rotation.lerp(end_rotation,t)
 
 func _fly(holder: Node3D, start: Vector3, finish: Vector3, start_rotation: Vector3, end_rotation: Vector3, duration: float, height: float) -> Tween:
  holder.position=start; holder.rotation=start_rotation
@@ -340,7 +352,7 @@ func set_opponent_view(enabled: bool, quick: bool = false) -> void:
 
 func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: bool) -> Tween:
  holder.position=start
- holder.rotation=Vector3(0,PI,0)
+ holder.rotation=Vector3.ZERO
  holder.get_node("ContactShadow").hide()
  holder.get_node("OwnerMark").hide()
  _set_card_directions_visible(holder,false)
@@ -414,6 +426,39 @@ var top_saved_table_scale: Vector3
 var top_saved_table_material: Material
 var top_saved_size: float
 var top_hidden: Dictionary = {}
+var card_focus_active := false
+var card_focus_transform: Transform3D
+var card_focus_size: float
+var card_focus_zoom: float
+var card_focus_tween: Tween
+
+func restore_card_focus() -> void:
+ if not card_focus_active:return
+ if card_focus_tween and card_focus_tween.is_valid():card_focus_tween.kill()
+ camera.transform=card_focus_transform
+ camera.size=card_focus_size
+ top_zoom=card_focus_zoom
+ card_focus_active=false
+
+func click_influence(cell: Vector2i) -> void:
+ if card_focus_active:
+  select_influence(INVALID)
+  return
+ select_influence(cell)
+ if selected_cell==INVALID:return
+ card_focus_transform=camera.transform
+ card_focus_size=camera.size
+ card_focus_zoom=top_zoom
+ card_focus_active=true
+ var target: Vector3=cell_position(selected_cell)
+ var destination: Transform3D=camera.transform
+ if top_view:
+  destination.origin=Vector3(target.x,camera.position.y,target.z)
+ else:
+  destination.origin=target+camera.basis.z*11.5
+ card_focus_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+ card_focus_tween.tween_property(camera,"transform",destination,0.18)
+ if top_view:card_focus_tween.tween_property(camera,"size",minf(camera.size,7.5),0.18)
 
 func _add_influence_overlay(holder: Node3D) -> void:
  if influence_mesh==null:
@@ -432,6 +477,7 @@ func _add_influence_overlay(holder: Node3D) -> void:
  holder.add_child(overlay)
 
 func select_influence(cell: Vector2i) -> void:
+ restore_card_focus()
  for link in influence_links:link.hide()
  selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
  influenced_cells.clear()
@@ -440,9 +486,8 @@ func select_influence(cell: Vector2i) -> void:
   var source: Node3D=cards[selected_cell]
   var id: String=str(source.get_meta("card_id"))
   var definition: Dictionary=Catalog.back_card(id) if bool(source.get_meta("reverse",false)) else Catalog.card(id)
-  var facing: int=-1 if str(source.get_meta("owner","player"))=="opponent" else 1
   for direction in Directions.for_definition(definition):
-   var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])*facing
+   var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])
    if target.x>=0 and target.x<COLS and target.y>=0 and target.y<ROWS:
     influence_range.append(target)
    if cards.has(target):influenced_cells.append(target)
@@ -456,6 +501,7 @@ func select_influence(cell: Vector2i) -> void:
 
 func set_top_view(enabled: bool) -> void:
  if top_view==enabled:return
+ restore_card_focus()
  if enabled:
   top_zoom=1.0
   top_saved_transform=camera.transform
@@ -499,11 +545,13 @@ func set_top_view(enabled: bool) -> void:
 
 func _fit_top_view() -> void:
  if not top_view:return
+ if card_focus_active:return
  var viewport_size: Vector2=get_viewport().get_visible_rect().size
  camera.size=maxf(STEP.y*ROWS+0.1,(STEP.x*COLS+0.1)*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
  _clamp_top_camera()
 func zoom_top_view(steps: float, pointer: Vector2 = Vector2(-1,-1)) -> void:
  if not top_view:return
+ if card_focus_active:select_influence(INVALID)
  var before: Variant=null
  if pointer.x>=0:
   before=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(pointer),camera.project_ray_normal(pointer))

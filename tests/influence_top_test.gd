@@ -25,6 +25,7 @@ func run() -> void:
   t.place("observe" if cell==Vector2i(2,1) else "guard",cell,true)
   t.mark_owner(cell,"player")
  await create_timer(0.2).timeout
+ var old_transform: Transform3D=t.camera.transform
  ui._test_pointer(t.screen_position(Vector2i(2,1)),true)
  check(t.cards[Vector2i(2,1)].get_node("Direction_right").position.x>0.74,"right tab projects outside card")
  check(t.cards[Vector2i(2,1)].get_node("Direction_up").position.z < -1.07,"up tab projects outside card")
@@ -38,7 +39,6 @@ func run() -> void:
  check(int(t.battle_grid_material.get_shader_parameter("influence_mask"))==((1<<2)|(1<<9)),"actual grid receives up/right range")
  check(t.mirror_grid.material_override==t.battle_grid_material,"mirror shares grid range")
  await capture("influence_perspective")
- var old_transform: Transform3D=t.camera.transform
  button(MOUSE_BUTTON_MIDDLE,Vector2(600,300))
  check(t.influence_links.filter(func(link):return link.visible).size()==2,"top view hides mirrored links")
  check(t.top_view and not ui.stage.visible,"MMB hides HUD in top view")
@@ -73,7 +73,7 @@ func run() -> void:
  button(MOUSE_BUTTON_LEFT,t.camera.unproject_position(t.cell_position(Vector2i(2,1))))
  t.mark_owner(Vector2i(2,1),"opponent")
  t.select_influence(t.INVALID);t.select_influence(Vector2i(2,1))
- check(Vector2i(2,2) in t.influenced_cells and Vector2i(1,1) in t.influenced_cells,"opponent facing reverses directions")
+ check(Vector2i(2,0) in t.influenced_cells and Vector2i(3,1) in t.influenced_cells,"upright opponent directions match visible tabs")
  root.size=Vector2i(800,720);await process_frame
  check(t.camera.size>16,"narrow aspect fits whole table")
  button(MOUSE_BUTTON_MIDDLE,Vector2(400,300))

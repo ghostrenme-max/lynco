@@ -28,11 +28,13 @@ func run() -> void:
  for cell in table.cards:
   var holder: Node3D=table.cards[cell]
   var enemy: bool=holder.get_meta("owner")=="opponent"
-  check(is_equal_approx(wrapf(holder.rotation.y,0,TAU),PI if enemy else 0.0),"near owner orientation")
-  check(is_equal_approx(wrapf(table.mirror_cards[cell].rotation.y,0,TAU),0.0 if enemy else PI),"mirror owner orientation")
+  check(is_zero_approx(wrapf(holder.rotation.y,0,TAU)),"both owners readable upright")
+  check(is_equal_approx(wrapf(table.mirror_cards[cell].rotation.y,0,TAU),PI),"mirror owner orientation")
   check(holder.get_node("OwnerMark").global_position.z>holder.global_position.z,"mark visible below both orientations")
   check(not holder.has_node("OwnerPlate"),"old owner frames removed")
-  check(holder.get_node("OwnerMark").get_child_count()==(4 if enemy else 1),"dashed or solid mark")
+  check(holder.get_node("OwnerMark").get_child_count()==(5 if enemy else 1),"opponent red dashes and side stripe or own solid mark")
+  if enemy:
+   check(holder.get_node("OwnerMark/OwnerSide").material_override==table.opponent_mark_material,"opponent stripe uses dedicated color")
   check(holder.get_node("Front").material_override.albedo_texture==table.mirror_cards[cell].get_node("Front").material_override.albedo_texture,"mirror material shared")
   if enemy and not ui.Catalog.card(holder.get_meta("card_id")).dark:enemy_cell=cell
   if not enemy:own_cell=cell
@@ -107,7 +109,7 @@ func run() -> void:
  var samples:=0
  while slide.is_running():
   check((holder.position-start).cross(finish-start).length()<0.0001,"strict straight path")
-  check(holder.rotation.is_equal_approx(Vector3(0,PI,0)),"no rotation during insertion")
+  check(holder.rotation.is_equal_approx(Vector3.ZERO),"upright throughout insertion")
   samples+=1
   await process_frame
  check(samples>3 and holder.position.is_equal_approx(finish),"fast insertion reaches target")
