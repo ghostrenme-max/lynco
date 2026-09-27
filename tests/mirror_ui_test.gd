@@ -16,7 +16,7 @@ func run() -> void:
  ui=current_scene.get_node("Interface")
  while ui.busy or ui.views.is_empty():await process_frame
  var table=ui.table
- check(is_equal_approx(table.get_node("OpponentTable").position.z,-13.8),"two separated tables")
+ check(is_equal_approx(table.get_node("OpponentTable").position.z,-19.8),"two separated tables")
  for prop in table.get_node("DummyProps").get_children():
   check(absf(prop.position.x)-prop.scale.x*0.5>11.25,"props outside table footprints")
  check(table.get_node("Table/Tabletop").mesh.size.x==22.5 and table.get_node("OpponentTable/Tabletop").mesh.size.x==22.5,"both tables 1.5x wide")
@@ -25,10 +25,10 @@ func run() -> void:
   check(card.get_node("Front").material_override==table.opponent_back_material and table.opponent_back_material.albedo_texture==null and table.opponent_back_material.albedo_color==Color.BLACK,"common hidden hand")
  await capture("player_1440")
  root.size=Vector2i(1280,720);await settle()
- for y in range(3):
-  for x in range(6):
+ for y in range(6):
+  for x in range(5):
    var cell:=Vector2i(x,y)
-   check(table.cell_at(table.screen_position(cell))==cell,"all 18 cells project and hit")
+   check(table.cell_at(table.screen_position(cell))==cell,"all 30 cells project and hit")
  await capture("player_1280")
  var uid: int=ui.model.hand[0].uid
  var id: String=ui.model.hand[0].id

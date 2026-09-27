@@ -43,7 +43,7 @@ func run() -> void:
  check(ui.table.camera.position.is_equal_approx(initial),"inspector blocks camera")
  await capture("inspector")
  ui._close_inspector()
- for i in range(30):
+ for i in range(70):
   if ui.model.finished: break
   var chosen := -1
   for entry in ui.model.hand:
@@ -53,7 +53,7 @@ func run() -> void:
   check(ui.table.cards.size()==ui.model.placed.size(),"board view/model agree")
   if ui.model.placed.size()>=7 and ui.model.placed.size()<=10: await capture("board")
  check(ui.model.finished and ui.result_panel.visible,"match reaches verdict")
- check(ui.table.cards.size()==18,"18 cards remain visible")
+ check(ui.table.cards.size()==ui.Model.CAPACITY,"30 cards remain visible")
  var enemy_count := 0
  for holder in ui.table.cards.values():
   if holder.get_meta("owner")=="opponent":enemy_count+=1

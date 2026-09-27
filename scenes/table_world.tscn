@@ -23,11 +23,11 @@ roughness = 1.0
 
 [sub_resource type="BoxMesh" id="TableMesh"]
 material = SubResource("Ivory")
-size = Vector3(22.5, 0.22, 11.4)
+size = Vector3(22.5, 0.22, 17.4)
 
 [sub_resource type="BoxMesh" id="ApronMesh"]
 material = SubResource("Edge")
-size = Vector3(22.2, 0.42, 11.1)
+size = Vector3(22.2, 0.42, 17.1)
 
 [sub_resource type="BoxMesh" id="LegMesh"]
 material = SubResource("Ivory")
@@ -38,7 +38,7 @@ material = SubResource("FloorMat")
 size = Vector2(80,80)
 
 [sub_resource type="BoxShape3D" id="TableCollision"]
-size = Vector3(22.5, 0.22, 11.4)
+size = Vector3(22.5, 0.22, 17.4)
 
 [sub_resource type="StandardMaterial3D" id="DummyMaterial"]
 albedo_color = Color(0.48, 0.46, 0.40, 1)
@@ -55,8 +55,8 @@ script = ExtResource("Script")
 environment = SubResource("Environment")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(0, 8.2, 9.0)
-rotation = Vector3(-0.750, 0, 0)
+position = Vector3(0, 14.0, 16.0)
+rotation = Vector3(-0.730, 0, 0)
 current = true
 fov = 52.0
 
@@ -82,22 +82,22 @@ mesh = SubResource("ApronMesh")
 cast_shadow = 0
 
 [node name="LegFrontLeft" type="MeshInstance3D" parent="Table"]
-position = Vector3(-9.9, -1.7, 4.8)
+position = Vector3(-9.9, -1.7, 7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegFrontRight" type="MeshInstance3D" parent="Table"]
-position = Vector3(9.9, -1.7, 4.8)
+position = Vector3(9.9, -1.7, 7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegBackLeft" type="MeshInstance3D" parent="Table"]
-position = Vector3(-9.9, -1.7, -4.8)
+position = Vector3(-9.9, -1.7, -7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegBackRight" type="MeshInstance3D" parent="Table"]
-position = Vector3(9.9, -1.7, -4.8)
+position = Vector3(9.9, -1.7, -7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
@@ -108,7 +108,7 @@ position = Vector3(0, -0.11, 0)
 shape = SubResource("TableCollision")
 
 [node name="OpponentTable" type="Node3D" parent="."]
-position = Vector3(0, 0, -13.8)
+position = Vector3(0, 0, -19.8)
 
 [node name="Tabletop" type="MeshInstance3D" parent="OpponentTable"]
 position = Vector3(0, -0.11, 0)
@@ -121,22 +121,22 @@ mesh = SubResource("ApronMesh")
 cast_shadow = 0
 
 [node name="LegFrontLeft" type="MeshInstance3D" parent="OpponentTable"]
-position = Vector3(-9.9, -1.7, 4.8)
+position = Vector3(-9.9, -1.7, 7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegFrontRight" type="MeshInstance3D" parent="OpponentTable"]
-position = Vector3(9.9, -1.7, 4.8)
+position = Vector3(9.9, -1.7, 7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegBackLeft" type="MeshInstance3D" parent="OpponentTable"]
-position = Vector3(-9.9, -1.7, -4.8)
+position = Vector3(-9.9, -1.7, -7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 
 [node name="LegBackRight" type="MeshInstance3D" parent="OpponentTable"]
-position = Vector3(9.9, -1.7, -4.8)
+position = Vector3(9.9, -1.7, -7.8)
 mesh = SubResource("LegMesh")
 cast_shadow = 0
 

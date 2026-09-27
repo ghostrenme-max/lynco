@@ -2,8 +2,8 @@ class_name LyncoTableView
 extends Node3D
 
 # Presentation only: cells never affect combat rules or card ownership.
-const COLS := 6
-const ROWS := 3
+const COLS := 5
+const ROWS := 6
 const INVALID := Vector2i(-1, -1)
 const STEP := Vector2(1.65, 2.35)
 const CARD_METRES := Vector2(1.48, 2.14)
@@ -68,6 +68,7 @@ func _ready() -> void:
  get_viewport().size_changed.connect(_fit_top_view)
  _setup_atmosphere()
  _setup_garnet_cubes()
+ _setup_distributors()
  set_process(false)
 
 func set_card_texture(id: String, texture: Texture2D) -> void:
@@ -80,16 +81,16 @@ func set_card_texture(id: String, texture: Texture2D) -> void:
  materials[id]=material
 
 func cell_position(cell: Vector2i) -> Vector3:
- return Vector3((cell.x-2.5)*STEP.x,0.065,(cell.y-1)*STEP.y-1.3)
+ return Vector3((cell.x-2.0)*STEP.x,0.065,(cell.y-2.5)*STEP.y-1.3)
 
 func cell_at(local_point: Vector2) -> Vector2i:
  if not ui_stage or opponent_view:return INVALID
- if not top_view and not Rect2(310,30,940,565).has_point(local_point):return INVALID
+ if not top_view and not Rect2(20,180,1560,450).has_point(local_point):return INVALID
  var point:Vector2=ui_stage.get_global_transform_with_canvas()*local_point
  if not get_viewport().get_visible_rect().has_point(point):return INVALID
  var hit:Variant=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(point),camera.project_ray_normal(point))
  if hit==null:return INVALID
- var cell:=Vector2i(roundi(hit.x/STEP.x+2.5),roundi((hit.z+1.3)/STEP.y+1))
+ var cell:=Vector2i(roundi(hit.x/STEP.x+2.0),roundi((hit.z+1.3)/STEP.y+2.5))
  if cell.x<0 or cell.x>=COLS or cell.y<0 or cell.y>=ROWS:return INVALID
  return cell
 
@@ -233,7 +234,7 @@ func _set_card_brightness(cell: Vector2i, highlighted: bool) -> void:
  mirror_cards[cell].get_node("Front").material_override=_far_material(material)
 
 # These are render-only counterparts. Only `cards` represents board occupancy.
-const OPPONENT_TABLE_Z: float = -13.8
+const OPPONENT_TABLE_Z: float = -19.8
 var mirror_cards: Dictionary = {}
 var opponent_fan: Array[Node3D] = []
 var opponent_back_material: StandardMaterial3D
@@ -242,8 +243,8 @@ var opponent_view: bool = false
 var saved_player_position: Vector3
 var saved_player_rotation: Vector3
 var saved_look_offset: Vector2
-@export var opponent_camera_position := Vector3(0,6.4,1.0)
-@export var opponent_camera_rotation := Vector3(-0.38,0,0)
+@export var opponent_camera_position := Vector3(0,9.2,0.0)
+@export var opponent_camera_rotation := Vector3(-0.42,0,0)
 
 func mirror_position(cell: Vector2i) -> Vector3:
  var near := cell_position(cell)
@@ -302,7 +303,7 @@ func show_opponent_hand(count: int) -> void:
   holder.visible=i<count
   if i>=count:continue
   var t: float = (float(i)-float(count-1)*0.5)/maxf(float(count-1)*0.5,1.0)
-  holder.position=Vector3((float(i)-float(count-1)*0.5)*1.08,2.55+0.52*(1.0-t*t),-18.0)
+  holder.position=Vector3((float(i)-float(count-1)*0.5)*1.08,2.55+0.52*(1.0-t*t),OPPONENT_TABLE_Z-5.6)
   holder.rotation=Vector3(1.20,0,-t*0.16)
 
 func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int, quick: bool) -> void:
@@ -456,7 +457,7 @@ func set_top_view(enabled: bool) -> void:
   camera.projection=Camera3D.PROJECTION_ORTHOGONAL
   camera.position=Vector3(0,25,0)
   camera.rotation=Vector3(-PI*0.5,0,0)
-  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$BetweenTablesShade,$GarnetCubes]:
+  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$BetweenTablesShade,$GarnetCubes,$Distributors]:
    top_hidden[node]=node.visible
    node.hide()
   for link in influence_links:
@@ -483,7 +484,7 @@ func set_top_view(enabled: bool) -> void:
 func _fit_top_view() -> void:
  if not top_view:return
  var viewport_size: Vector2=get_viewport().get_visible_rect().size
- camera.size=maxf(12.4,23.5*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
+ camera.size=maxf(18.4,23.5*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
 func zoom_top_view(steps: float) -> void:
  if not top_view:return
  top_zoom=clampf(top_zoom*pow(0.88,steps),0.35,1.25)
@@ -537,11 +538,11 @@ func _setup_garnet_cubes() -> void:
  var mesh: ArrayMesh=surface.commit()
  var material:=ShaderMaterial.new()
  material.shader=preload("res://asset/garnet_glass.gdshader")
- var positions: Array[Vector3]=[Vector3(5.95,0.36,3.1),Vector3(6.8,0.36,3.4),Vector3(6.55,0.36,2.25)]
+ var positions: Array[Vector3]=[Vector3(7.3,0.245,5.2),Vector3(7.9,0.245,5.2),Vector3(7.6,0.245,4.6)]
  for i in range(3):
   var cube:=MeshInstance3D.new()
   cube.name="Garnet"+str(i+1);cube.mesh=mesh;cube.material_override=material
-  cube.position=positions[i];cube.scale=Vector3.ONE*0.70;cube.rotation.y=0.12+float(i)*0.23
+  cube.position=positions[i];cube.scale=Vector3.ONE*0.48;cube.rotation.y=0.12+float(i)*0.23
   group.add_child(cube)
   var core:=MeshInstance3D.new()
   core.name="VioletCore"
@@ -626,3 +627,43 @@ func _refresh_battle_grid() -> void:
  var active: bool=not cards.is_empty() or preview_cell!=INVALID
  battle_grid.visible=active
  mirror_grid.visible=active and not top_view
+
+var black_market_open := false
+var black_market_glow: StandardMaterial3D
+
+func _setup_distributors() -> void:
+ var group:=Node3D.new();group.name="Distributors";add_child(group)
+ for side in [-1,1]:
+  var machine:=Node3D.new()
+  machine.name="Shop" if side<0 else "BlackMarket"
+  machine.position=Vector3(float(side)*9.2,0.1,OPPONENT_TABLE_Z*0.5)
+  group.add_child(machine)
+  var shell:=StandardMaterial3D.new()
+  shell.albedo_color=Color("dddcd1") if side<0 else Color("292c2d")
+  shell.roughness=0.3; shell.metallic=0.2
+  var body:=MeshInstance3D.new()
+  var cylinder:=CylinderMesh.new()
+  cylinder.top_radius=0.66;cylinder.bottom_radius=0.72;cylinder.height=1.55
+  body.mesh=cylinder;body.material_override=shell;body.position.y=0.6
+  machine.add_child(body)
+  var cap:=MeshInstance3D.new()
+  var lid:=CylinderMesh.new();lid.top_radius=0.62;lid.bottom_radius=0.66;lid.height=0.12
+  cap.mesh=lid;cap.material_override=shell;cap.position.y=1.4;machine.add_child(cap)
+  var slot:=MeshInstance3D.new();slot.name="Slot"
+  var slot_mesh:=BoxMesh.new();slot_mesh.size=Vector3(0.87,0.14,0.08)
+  slot.mesh=slot_mesh;slot.position=Vector3(0,0.68,0.67)
+  var slot_material:=StandardMaterial3D.new()
+  slot_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+  slot_material.albedo_color=Color("181a19")
+  slot.material_override=slot_material;machine.add_child(slot)
+  var lip:=MeshInstance3D.new();var tray:=BoxMesh.new();tray.size=Vector3(0.95,0.05,0.42)
+  lip.mesh=tray;lip.material_override=shell;lip.position=Vector3(0,0.49,0.8);machine.add_child(lip)
+  var light:=OmniLight3D.new();light.name="ActiveLight";light.position=Vector3(0,0.9,0.8)
+  light.light_color=Color("f12c40");light.light_energy=1.2;light.omni_range=2.8
+  light.hide();machine.add_child(light)
+  if side>0:black_market_glow=slot_material
+
+func set_black_market_open(enabled: bool) -> void:
+ black_market_open=enabled
+ black_market_glow.albedo_color=Color("ff263b") if enabled else Color("181a19")
+ $Distributors/BlackMarket/ActiveLight.visible=enabled

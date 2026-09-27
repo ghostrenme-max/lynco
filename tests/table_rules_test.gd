@@ -29,7 +29,7 @@ func _initialize() -> void:
     var before: int = a.placed.size()
     a.end_turn(); b.end_turn()
     check(a.placed.size()>=before,"table persists")
-  check(a.finished and a.placed.size()==18,"table full terminates")
+  check(a.finished and a.placed.size()==Model.CAPACITY,"table full terminates")
   var player := 0; var enemy := 0
   for record in a.placed:
    if record.owner=="player": player += record.score

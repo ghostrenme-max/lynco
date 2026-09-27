@@ -42,8 +42,8 @@ func run() -> void:
  check(t.top_view and not ui.stage.visible,"MMB hides HUD in top view")
  check(t.camera.projection==Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(t.camera.rotation.x,-PI/2),"vertical orthographic camera")
  check(not t.get_node("DummyProps").visible and not t.get_node("OpponentTable").visible and not t.get_node("Floor").visible,"table and cards only")
- for y in range(3):
-  for x in range(6):
+ for y in range(6):
+  for x in range(5):
    var cell:=Vector2i(x,y)
    check(t.cell_at(t.screen_position(cell))==cell,"top view hit mapping")
  await capture("influence_top_1280")

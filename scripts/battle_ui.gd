@@ -12,8 +12,8 @@ const Table = preload("res://scripts/table_view.gd")
 const INK := Color("171a17")
 const MUTED := Color("606460")
 const YELLOW := Color("f5d335")
-const DECK_ORIGIN := Vector2(66, 700)
-const DISCARD_ORIGIN := Vector2(1454, 720)
+const DECK_ORIGIN := Vector2(44, 655)
+const DISCARD_ORIGIN := Vector2(1432, 665)
 # Card center aligns with the left deck center (66 + 83 / 2).
 # Rise vertically above that deck, then deal rightward into the hand.
 const DRAW_STACK := Vector2(28.5, 450)
@@ -208,6 +208,9 @@ var turn_board: Panel
 var turn_track: Control
 var turn_caption: Label
 var camera_keys: Dictionary = {}
+var saved_window_mode: Window.Mode = Window.MODE_WINDOWED
+var saved_window_size := Vector2i.ZERO
+var saved_window_position := Vector2i.ZERO
 
 func _build_ui() -> void:
  turn_board=_panel(stage,Vector2(600,20),Vector2(970,156),Color("171a18"),20)
@@ -314,7 +317,7 @@ func _build_ui() -> void:
  _build_overlays()
  # Secondary controls live in the help panel, leaving the tabletop HUD clear.
  menu_button.position=Vector2(32,153);menu_button.text="←";menu_button.size=Vector2(43,34)
- help_button.position=Vector2(87,153)
+ menu_button.hide();help_button.hide()
  var secondary_controls: Array[Control]=[fill_button,shift_button,draw_button,seed_label,seed_box,reset_button,motion_toggle]
  for control in secondary_controls:
   control.reparent(help_panel)
@@ -335,9 +338,9 @@ func _build_ui() -> void:
 
 func _build_pile(pos: Vector2, black: bool) -> void:
  for i in range(3,-1,-1):
-  _panel(stage,pos+Vector2(-i*4,i*4),Vector2(83,115),INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
+  _panel(stage,pos+Vector2(-i*4,i*4),Vector2(124,172),INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
  var back := TextureRect.new()
- back.position=pos; back.size=Vector2(83,115)
+ back.position=pos; back.size=Vector2(124,172)
  back.texture=textures["back_black" if black else "back_white"]
  back.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
  back.stretch_mode=TextureRect.STRETCH_SCALE
@@ -358,7 +361,7 @@ func _build_overlays() -> void:
  help_panel=_panel(stage,Vector2(420,210),Vector2(760,430),Color("fafbf6"),16,Color("c8cfbd"))
  help_panel.z_index=110; help_panel.mouse_filter=Control.MOUSE_FILTER_STOP
  _label(help_panel,"플레이 안내",Vector2(32,27),Vector2(640,47),28)
- _label(help_panel,"손패 클릭 / 숫자 1–7    선택 · 우클릭    상세\n더블클릭 / Enter / 드래그    카드 사용\nE    손패 5장 보충 / Shift    가림 셔플\n가린 카드 클릭    정체 공개 (효과·비용 미정)\nWASD    이동 / 우클릭 드래그    둘러보기 / R    중앙\nSpace    턴 종료 / Esc    선택 해제 · 안내 닫기\nF3    FPS · 프레임 · 드로우 콜 표시\n테이블 카드 클릭    영향 대상 표시 / 우클릭    상세\n휠 클릭    탑뷰 전환 · 복귀 / 탑뷰 휠    확대·축소",Vector2(33,93),Vector2(694,265),19)
+ _label(help_panel,"손패 클릭 / 숫자 1–7    선택 · 우클릭    상세\n더블클릭 / Enter / 드래그    카드 사용\nE    손패 5장 보충 / Shift    가림 셔플\n가린 카드 클릭    정체 공개 (효과·비용 미정)\nWASD    이동 / 우클릭 드래그    둘러보기 / R    중앙\nSpace    턴 종료 / Esc    선택 해제 · 안내 닫기\nF3    FPS · 프레임 · 드로우 콜 표시\n테이블 카드 클릭    영향 대상 표시 / 우클릭    상세\n휠 클릭    탑뷰 / 휠    확대·축소 / L    전체화면",Vector2(33,93),Vector2(694,265),19)
  var close := _button(help_panel,"닫기",Vector2(579,362),Vector2(148,42),true)
  close.pressed.connect(func():help_panel.hide())
  help_panel.hide()
@@ -610,9 +613,9 @@ func _demo_draw() -> void:
 
 func _sync_ui() -> void:
  if is_instance_valid(table_status):
-  table_status.text="행동력 %d / 3      점수  %d : %d      배치 %d / 18" % [model.energy,model.player_score,model.opponent_score,model.placed.size()]
+  table_status.text="행동력 %d / 3      점수  %d : %d      배치 %d / %d" % [model.energy,model.player_score,model.opponent_score,model.placed.size(),Model.CAPACITY]
   turn_caption.text="%02d 턴   ·   %s" % [model.turn,"판정 완료" if model.finished else ("진행 중" if busy else "내 차례")]
-  turn_track.set_progress(model.placed.size(),18)
+  turn_track.set_progress(model.placed.size(),Model.CAPACITY)
   garnet_label.text=str(preload("res://scripts/collection_session.gd").gold)
  if busy or model.finished: _hide_hover_direction()
  deck_label.text="덱  %d" % model.deck.size()
@@ -663,6 +666,10 @@ func _check_end() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
  if not event is InputEventKey or not event.pressed or event.echo:return
+ if event.keycode==KEY_F1:
+  help_panel.visible=not help_panel.visible
+  _hide_hover_direction()
+  get_viewport().set_input_as_handled();return
  if event.keycode==KEY_F3:
   show_performance=not show_performance
   performance_label.visible=show_performance
@@ -839,7 +846,7 @@ func _verify() -> void:
   if uid>=0:await _activate_card(uid)
   else:await _end_turn()
   assert(model.conserved() and table.cards.size()==model.placed.size())
- assert(model.finished and result_panel.visible and table.cards.size()==18)
+ assert(model.finished and result_panel.visible and table.cards.size()==Model.CAPACITY)
  var snapshot: String=JSON.stringify([model.hand,model.placed,model.energy])
  await _end_turn();await _demo_draw();await _fill_requested();await _shift_requested()
  assert(snapshot==JSON.stringify([model.hand,model.placed,model.energy]))
@@ -889,6 +896,10 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ if event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode==KEY_L or event.keycode==KEY_L):
+  _toggle_fullscreen()
+  get_viewport().set_input_as_handled()
+  return
  if is_instance_valid(table) and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE and event.pressed:
   if not busy and not inspector_open and drag_uid<0 and press_uid<0 and not help_panel.visible:
    _stop_look();_hide_hover_direction();camera_keys.clear()
@@ -916,7 +927,7 @@ func _input(event: InputEvent) -> void:
  if not is_instance_valid(table) or not is_instance_valid(stage):return
  if not inspector_open and event is InputEventMouseButton:
   var hud_point: Vector2=stage.get_global_transform_with_canvas().affine_inverse()*event.position
-  if turn_board.get_rect().has_point(hud_point) or menu_button.get_rect().has_point(hud_point) or Rect2(87,153,37,34).has_point(hud_point):return
+  if turn_board.get_rect().has_point(hud_point) or (menu_button.visible and menu_button.get_rect().has_point(hud_point)):return
  if inspector_open:
   if event is InputEventMouseButton:
    if event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
@@ -946,7 +957,7 @@ func _input(event: InputEvent) -> void:
    var holder: Node3D=table.cards[placed_cell]
    _inspect_placed(str(holder.get_meta("card_id")),bool(holder.get_meta("reverse",false)),str(holder.get_meta("owner","player")))
    get_viewport().set_input_as_handled();return
-  if not Rect2(310,30,940,565).has_point(point):return
+  if not Rect2(20,180,1560,450).has_point(point):return
   looking=true;look_pointer=get_viewport().get_mouse_position()
   previous_mouse_mode=Input.mouse_mode
   Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
@@ -1462,3 +1473,16 @@ func _set_reduced_motion(value: bool) -> void:
  hover_direction.set_reduced_motion(value)
  inspector_diagram.set_reduced_motion(value)
  table.direction_material.set_shader_parameter("reduced_motion",value)
+
+func _toggle_fullscreen() -> void:
+ var window:=get_window()
+ if window.mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN]:
+  window.mode=saved_window_mode
+  if saved_window_mode==Window.MODE_WINDOWED and saved_window_size!=Vector2i.ZERO:
+   window.size=saved_window_size
+   window.position=saved_window_position
+ else:
+  saved_window_mode=window.mode
+  saved_window_size=window.size
+  saved_window_position=window.position
+  window.mode=Window.MODE_FULLSCREEN

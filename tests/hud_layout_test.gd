@@ -29,7 +29,18 @@ func run() -> void:
   check(particles.emission_sphere_radius+particles.initial_velocity_max*particles.lifetime<0.4,"travel stays inside cube")
   check(particles.color_ramp.sample(1.0).a==0.0,"particles disappear at end of short travel")
  check(ui.turn_track.occupied==ui.model.placed.size(),"progress from model")
+ check(not ui.menu_button.visible,"top left arrow removed")
+ check(ui.table.COLS==5 and ui.table.ROWS==6 and ui.Model.CAPACITY==30,"5 by 6 playable board")
+ check(not ui.table.black_market_open and not ui.table.get_node("Distributors/BlackMarket/ActiveLight").visible,"black market idle")
+ for y in range(6):
+  for x in range(5):
+   var cell:=Vector2i(x,y)
+   check(ui.table.cell_at(ui.table.screen_position(cell))==cell,"all thirty cells hit")
  await capture("hud_layout_1280")
+ ui.table.set_black_market_open(true)
+ check(ui.table.get_node("Distributors/BlackMarket/ActiveLight").visible,"black market opens red")
+ await capture("black_market_open")
+ ui.table.set_black_market_open(false)
  root.size=Vector2i(1600,900);await process_frame
  await capture("hud_layout_1600")
  root.size=Vector2i(1280,720);await process_frame

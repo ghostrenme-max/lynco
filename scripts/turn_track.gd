@@ -1,6 +1,6 @@
 extends Control
 var occupied: int = 0
-var capacity: int = 18
+var capacity: int = 30
 func set_progress(value: int, maximum: int) -> void:
  occupied=value;capacity=maximum;queue_redraw()
 func _draw() -> void:
