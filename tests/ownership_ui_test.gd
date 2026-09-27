@@ -118,6 +118,8 @@ func run() -> void:
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(child.visible,"directions appear after landing")
  var empty:=Vector2i(5,4)
+ await create_timer(0.16).timeout
+ check(holder.scale.is_equal_approx(Vector3.ONE),"opponent landing settles before next placement")
  table.place("guard",empty,false)
  check(table.mirror_cards[empty].position.is_equal_approx(table.mirror_position(empty)),"mirror copy appears immediately")
  check(table.animations.size()==1,"only own local landing is animated")

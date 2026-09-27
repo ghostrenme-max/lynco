@@ -28,6 +28,8 @@ var reason_label: Label
 var outline_style: StyleBoxFlat
 var face_up: bool = true
 var concealed: bool = false
+var reduced_motion := false
+var focus_offset := 0.0
 var face_nodes: Array[CanvasItem] = []
 var back_logo: TextureRect
 
@@ -167,9 +169,12 @@ func update_pose(duration: float = 0.13) -> void:
  var lift: float = -32.0 if hover else (CARD_SIZE.y * (1.0 - PEER_SCALE) * 0.5 if diminished else (-16.0 if selected else 0.0))
  z_index = 80 if hover else (40 if selected and not diminished else 0)
  movement = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
- movement.tween_property(self, "position", rest_position + Vector2(0, lift), duration)
- movement.tween_property(self, "rotation", 0.0 if hover or (selected and not diminished) else rest_rotation, duration)
- movement.tween_property(self, "scale", Vector2.ONE * target_scale, duration)
+ var settle_time: float=0.07 if reduced_motion else maxf(duration,0.18)
+ var delay: float=0.025 if diminished and not reduced_motion else 0.0
+ movement.tween_property(self, "position", rest_position + Vector2(focus_offset if diminished and not reduced_motion else 0.0, lift), settle_time).set_delay(delay)
+ movement.tween_property(self, "rotation", 0.0 if hover or (selected and not diminished) else rest_rotation, settle_time).set_delay(delay)
+ var pop=movement.tween_property(self, "scale", Vector2.ONE * target_scale, settle_time).set_delay(delay)
+ if not reduced_motion and (hover or selected):pop.set_trans(Tween.TRANS_BACK)
 
 func stop_motion() -> void:
  if movement and movement.is_valid(): movement.kill()

@@ -44,6 +44,9 @@ var opponent_side_mesh: PlaneMesh
 var battle_grid: MeshInstance3D
 var mirror_grid: MeshInstance3D
 var battle_grid_material: ShaderMaterial
+var reduced_motion := false
+var influence_tween: Tween
+var preview_tween: Tween
 
 func _ready() -> void:
  world=$PlacedCards
@@ -120,7 +123,12 @@ func preview(local_point: Vector2, usable: bool) -> Vector2i:
   return cell
  var allowed:bool=usable and free_cell(cell)
  if preview_cell!=cell or not hint.visible:
+  if preview_tween and preview_tween.is_valid():preview_tween.kill()
   hint.position=cell_position(cell)+Vector3(0,0.018,0)
+  hint.scale=Vector3.ONE*0.97 if not reduced_motion else Vector3.ONE
+  if not reduced_motion:
+   preview_tween=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+   preview_tween.tween_property(hint,"scale",Vector3.ONE,0.1)
  if preview_allowed!=allowed or not hint.visible:
   hint_material.set_shader_parameter("tint",Color(1.0,0.84,0.26,1.0) if allowed else Color(0.55,0.57,0.59,0.35))
  preview_cell=cell;preview_allowed=allowed
@@ -129,6 +137,8 @@ func preview(local_point: Vector2, usable: bool) -> Vector2i:
  return cell
 
 func hide_preview() -> void:
+ if preview_tween and preview_tween.is_valid():preview_tween.kill()
+ hint.scale=Vector3.ONE
  if hint.visible:hint.hide()
  preview_cell=INVALID
  _refresh_battle_grid()
@@ -165,7 +175,7 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
  back_materials[id]=material
 
 func look_by(relative: Vector2) -> void:
- if opponent_view or top_view or card_focus_active:return
+ if opponent_view or top_view or card_focus_active or card_focus_returning:return
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
@@ -193,7 +203,7 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
   holder.add_child(arrow)
 
 func pan_by(direction: Vector2, delta: float) -> void:
- if opponent_view or top_view or card_focus_active:return
+ if opponent_view or top_view or card_focus_active or card_focus_returning:return
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
@@ -290,7 +300,9 @@ func _fly(holder: Node3D, start: Vector3, finish: Vector3, start_rotation: Vecto
  var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
  tween.tween_method(_flight_pose.bind(holder,start,finish,start_rotation,end_rotation,height),0.0,1.0,duration)
  tween.finished.connect(func():
-  if is_instance_valid(holder):holder.get_node("ContactShadow").show())
+  if is_instance_valid(holder):
+   holder.get_node("ContactShadow").show()
+   _settle_card(holder))
  _track(tween)
  return tween
 
@@ -364,9 +376,17 @@ func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: boo
    holder.get_node("ContactShadow").show()
    holder.get_node("OwnerMark").show()
    _set_card_directions_visible(holder,true))
+ tween.tween_callback(_settle_card.bind(holder))
  tween.tween_interval(0.02 if quick else 0.04)
  _track(tween)
  return tween
+
+func _settle_card(holder: Node3D) -> void:
+ if reduced_motion:return
+ holder.scale=Vector3(1.035,1,0.97)
+ var settle:=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+ settle.tween_property(holder,"scale",Vector3.ONE,0.14)
+ _track(settle)
 
 # Cache distant variants without modifying resources shared by the near table.
 func _far_material(source: StandardMaterial3D) -> StandardMaterial3D:
@@ -431,18 +451,33 @@ var card_focus_transform: Transform3D
 var card_focus_size: float
 var card_focus_zoom: float
 var card_focus_tween: Tween
+var card_focus_returning := false
 
 func restore_card_focus() -> void:
- if not card_focus_active:return
+ if not card_focus_active and not card_focus_returning:return
  if card_focus_tween and card_focus_tween.is_valid():card_focus_tween.kill()
  camera.transform=card_focus_transform
  camera.size=card_focus_size
  top_zoom=card_focus_zoom
  card_focus_active=false
+ card_focus_returning=false
+
+func dismiss_card_focus() -> void:
+ var from_transform: Transform3D=camera.transform
+ var from_size: float=camera.size
+ var animate: bool=card_focus_active and not reduced_motion
+ select_influence(INVALID)
+ if not animate:return
+ camera.transform=from_transform;camera.size=from_size
+ card_focus_returning=true
+ card_focus_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+ card_focus_tween.tween_property(camera,"transform",card_focus_transform,0.2)
+ card_focus_tween.tween_property(camera,"size",card_focus_size,0.2)
+ card_focus_tween.finished.connect(func():card_focus_returning=false)
 
 func click_influence(cell: Vector2i) -> void:
  if card_focus_active:
-  select_influence(INVALID)
+  dismiss_card_focus()
   return
  select_influence(cell)
  if selected_cell==INVALID:return
@@ -457,8 +492,9 @@ func click_influence(cell: Vector2i) -> void:
  else:
   destination.origin=target+camera.basis.z*11.5
  card_focus_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
- card_focus_tween.tween_property(camera,"transform",destination,0.18)
- if top_view:card_focus_tween.tween_property(camera,"size",minf(camera.size,7.5),0.18)
+ var duration: float=0.07 if reduced_motion else 0.18
+ card_focus_tween.tween_property(camera,"transform",destination,duration)
+ if top_view:card_focus_tween.tween_property(camera,"size",minf(camera.size,7.5),duration)
 
 func _add_influence_overlay(holder: Node3D) -> void:
  if influence_mesh==null:
@@ -478,6 +514,7 @@ func _add_influence_overlay(holder: Node3D) -> void:
 
 func select_influence(cell: Vector2i) -> void:
  restore_card_focus()
+ if influence_tween and influence_tween.is_valid():influence_tween.kill()
  for link in influence_links:link.hide()
  selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
  influenced_cells.clear()
@@ -498,6 +535,11 @@ func select_influence(cell: Vector2i) -> void:
    overlay.material_override=influence_glow if placed_cell in influenced_cells else influence_dim
  _show_influence_links()
  _refresh_battle_grid()
+ battle_grid_material.set_shader_parameter("influence_origin",Vector2(selected_cell)+Vector2(0.5,0.5))
+ battle_grid_material.set_shader_parameter("influence_reveal",1.0 if reduced_motion or selected_cell==INVALID else 0.0)
+ if selected_cell!=INVALID and not reduced_motion:
+  influence_tween=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+  influence_tween.tween_property(battle_grid_material,"shader_parameter/influence_reveal",1.0,0.22)
 
 func set_top_view(enabled: bool) -> void:
  if top_view==enabled:return
@@ -551,6 +593,7 @@ func _fit_top_view() -> void:
  _clamp_top_camera()
 func zoom_top_view(steps: float, pointer: Vector2 = Vector2(-1,-1)) -> void:
  if not top_view:return
+ if card_focus_returning:restore_card_focus()
  if card_focus_active:select_influence(INVALID)
  var before: Variant=null
  if pointer.x>=0:

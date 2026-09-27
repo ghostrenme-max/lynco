@@ -2,6 +2,8 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never;
 uniform int opponent_mask = 0;
 uniform int influence_mask = 0;
+uniform vec2 influence_origin = vec2(0.0);
+uniform float influence_reveal = 1.0;
 void fragment() {
  vec2 grid = UV * vec2(6.0,5.0);
  ivec2 cell = clamp(ivec2(floor(grid)),ivec2(0),ivec2(5,4));
@@ -14,7 +16,9 @@ void fragment() {
  if (affected) {
   float border = 1.0-smoothstep(0.035,0.065,distance_to_line);
   ALBEDO=vec3(0.95,0.16,0.64);
-  ALPHA=0.24+0.56*border+0.10*halo;
+  float travel=length((grid-influence_origin)*vec2(3.1,2.35));
+  float reveal=1.0-smoothstep(influence_reveal*6.5,influence_reveal*6.5+0.6,travel);
+  ALPHA=(0.24+0.56*border+0.10*halo)*reveal;
  } else if (enemy) {
   ALBEDO=vec3(0.95,0.10,0.16);
   ALPHA=0.12+0.50*line+0.22*halo;

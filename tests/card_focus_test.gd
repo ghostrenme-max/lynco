@@ -33,6 +33,7 @@ func run() -> void:
   await RenderingServer.frame_post_draw
   root.get_texture().get_image().save_png("res://test-results/card_focus_"+str(viewport_size.x)+".png")
   click(Vector2(8,8))
+  await create_timer(0.24).timeout
   check(not t.card_focus_active and t.camera.transform.is_equal_approx(original),"outside board restores exact original view")
   ui._test_pointer(t.screen_position(cell),true)
   click(Vector2(8,8))
@@ -44,6 +45,7 @@ func run() -> void:
   var turn_before: int=ui.model.turn
   click(ui.stage.get_global_transform_with_canvas()*ui.turn_board.get_rect().get_center())
   check(not t.card_focus_active and ui.model.turn==turn_before and not ui.busy,"HUD click only dismisses focus")
+  await create_timer(0.24).timeout
  t.set_top_view(true);ui.stage.hide()
  t.zoom_top_view(2)
  var top_transform: Transform3D=t.camera.transform
@@ -53,6 +55,7 @@ func run() -> void:
  await create_timer(0.22).timeout
  check(t.card_focus_active and t.camera.size<top_size,"top view focuses and zooms")
  click(t.camera.unproject_position(t.cell_position(cell)))
+ await create_timer(0.24).timeout
  check(t.camera.transform.is_equal_approx(top_transform) and is_equal_approx(t.camera.size,top_size) and is_equal_approx(t.top_zoom,top_zoom),"same card restores previous top zoom")
  click(t.camera.unproject_position(t.cell_position(cell)))
  t.set_top_view(false);ui.stage.show()

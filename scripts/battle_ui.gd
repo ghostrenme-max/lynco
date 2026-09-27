@@ -206,6 +206,10 @@ var inspector_score: Control
 var table_status: Label
 var garnet_label: Label
 var turn_board: Panel
+var hud_values: Dictionary = {}
+var hud_cache: Dictionary = {}
+var hud_tweens: Dictionary = {}
+var turn_motion: Tween
 var turn_track: Control
 var turn_caption: Label
 var camera_keys: Dictionary = {}
@@ -215,6 +219,16 @@ func _build_ui() -> void:
  turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
  turn_caption=_label(turn_board,"",Vector2(28,14),Vector2(710,32),22,Color("eeeee5"))
  table_status=_label(turn_board,"",Vector2(28,114),Vector2(700,25),16,Color("c4c7bd"))
+ _label(table_status,"행동력",Vector2.ZERO,Vector2(58,25),16,Color("c4c7bd"))
+ hud_values.energy=_label(table_status,"",Vector2(62,0),Vector2(24,25),16,Color("eeeee5"))
+ _label(table_status,"/ 3",Vector2(90,0),Vector2(36,25),16,Color("c4c7bd"))
+ _label(table_status,"점수",Vector2(152,0),Vector2(40,25),16,Color("c4c7bd"))
+ hud_values.player_score=_label(table_status,"",Vector2(196,0),Vector2(48,25),16,Color("eeeee5"))
+ _label(table_status,":",Vector2(246,0),Vector2(10,25),16,Color("c4c7bd"))
+ hud_values.opponent_score=_label(table_status,"",Vector2(266,0),Vector2(48,25),16,Color("eeeee5"))
+ _label(table_status,"배치",Vector2(344,0),Vector2(40,25),16,Color("c4c7bd"))
+ hud_values.placed=_label(table_status,"",Vector2(392,0),Vector2(30,25),16,Color("eeeee5"))
+ _label(table_status,"/ %d" % Model.CAPACITY,Vector2(426,0),Vector2(45,25),16,Color("c4c7bd"))
  turn_track=preload("res://scripts/turn_track.gd").new()
  turn_track.position=Vector2(26,52);turn_track.size=Vector2(714,52)
  turn_track.mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -391,6 +405,7 @@ func _reset_requested() -> void:
 
 func _spawn(entry: Dictionary) -> LyncoCardView:
  var view := Card.new()
+ view.reduced_motion=reduced_motion
  var definition: Dictionary=Catalog.table_card(entry.id)
  hand_layer.add_child(view)
  view.setup(entry,definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
@@ -485,7 +500,9 @@ func _focus_card(uid: int, inside: bool) -> void:
   hovered_uid=-1
   if selected_uid>=0:_inspect(selected_uid)
  else:return
- for view in views.values():view.set_hand_focus(hovered_uid)
+ for view in views.values():
+  view.focus_offset=signf(view.rest_position.x-views[hovered_uid].rest_position.x)*10.0 if views.has(hovered_uid) else 0.0
+  view.set_hand_focus(hovered_uid)
  _schedule_hover_direction()
 
 func _clear_hand_focus() -> void:
@@ -535,6 +552,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
   var definition: Dictionary = Catalog.back_card(str(result.entry.id))
   hand_layer.add_child(revealed)
   revealed.setup(result.entry,definition,Symbols.texture_for(definition),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
+  revealed.reduced_motion=reduced_motion
   revealed.position=view.position;revealed.rotation=view.rotation;revealed.scale=view.scale
   view.stop_motion();view.queue_free();view=revealed
  views.erase(uid); view.stop_motion(); view.locked=true; view.z_index=55
@@ -609,10 +627,36 @@ func _demo_draw() -> void:
  await _animate_draw(drawn)
  busy=false;_sync_ui()
 
+func _set_hud_value(key: String, value: int) -> void:
+ var label: Label=hud_values[key]
+ var changed: bool=hud_cache.has(key) and int(hud_cache[key])!=value
+ label.text=str(value)
+ hud_cache[key]=value
+ if not changed:return
+ if hud_tweens.has(key) and hud_tweens[key].is_valid():hud_tweens[key].kill()
+ label.scale=Vector2.ONE;label.modulate=Color.WHITE
+ if reduced_motion:return
+ label.pivot_offset=label.size*0.5
+ label.scale=Vector2.ONE*(0.88 if key=="energy" else 1.16)
+ var tween:=create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+ tween.tween_property(label,"scale",Vector2.ONE,0.2)
+ hud_tweens[key]=tween
+
 func _sync_ui() -> void:
  if is_instance_valid(table_status):
-  table_status.text="행동력 %d / 3      점수  %d : %d      배치 %d / %d" % [model.energy,model.player_score,model.opponent_score,model.placed.size(),Model.CAPACITY]
+  _set_hud_value("energy",model.energy)
+  _set_hud_value("player_score",model.player_score)
+  _set_hud_value("opponent_score",model.opponent_score)
+  _set_hud_value("placed",model.placed.size())
+  var previous_caption: String=turn_caption.text
   turn_caption.text="%02d 턴   ·   %s" % [model.turn,"판정 완료" if model.finished else ("진행 중" if busy else "내 차례")]
+  if previous_caption!=turn_caption.text:
+   if turn_motion and turn_motion.is_valid():turn_motion.kill()
+   turn_caption.position=Vector2(28,14)
+   if not reduced_motion and not previous_caption.is_empty():
+    turn_caption.position.x+=10
+    turn_motion=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+    turn_motion.tween_property(turn_caption,"position:x",28.0,0.2)
   turn_track.set_progress(model.placed.size(),Model.CAPACITY)
   garnet_label.text=str(preload("res://scripts/collection_session.gd").gold)
  if busy or model.finished: _hide_hover_direction()
@@ -793,7 +837,7 @@ func _verify_motion() -> void:
   for entry in model.hand:
    var view:LyncoCardView=views[int(entry.uid)]
    _test_pointer(view.rest_position+Card.CARD_SIZE*0.5)
-   await get_tree().create_timer(0.18).timeout
+   await get_tree().create_timer(0.25).timeout
    assert(hovered_uid==int(entry.uid))
    assert(absf(view.scale.x-Card.HOVER_SCALE)<0.001)
    for uid in views:
@@ -907,8 +951,8 @@ func _input(event: InputEvent) -> void:
   if is_instance_valid(inventory_layer) and event.keycode==KEY_ESCAPE:
    _toggle_inventory();get_viewport().set_input_as_handled();return
  if is_instance_valid(inventory_layer):return
- if is_instance_valid(table) and table.card_focus_active and event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
-  table.select_influence(Table.INVALID)
+ if is_instance_valid(table) and (table.card_focus_active or table.card_focus_returning) and event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
+  table.dismiss_card_focus()
   press_uid=-1
   get_viewport().set_input_as_handled()
   return
@@ -1028,8 +1072,13 @@ func _input(event: InputEvent) -> void:
    _inspect(drag_uid)
   if drag_uid>=0:
    var view:LyncoCardView=views[drag_uid]
-   view.position=point-Vector2(Card.CARD_SIZE.x*0.5,Card.CARD_SIZE.y*0.9)
-   table.preview(point,model.unavailable_reason(drag_uid).is_empty())
+   var target: Vector2=point-Vector2(Card.CARD_SIZE.x*0.5,Card.CARD_SIZE.y*0.9)
+   view.rotation=clampf((target.x-view.position.x)*0.0012,-0.075,0.075) if not reduced_motion else 0.0
+   view.position=target
+   var cell: Vector2i=table.preview(point,model.unavailable_reason(drag_uid).is_empty())
+   if cell!=Table.INVALID and table.preview_allowed and not reduced_motion:
+    var snap: Vector2=table.screen_position(cell)
+    if point.distance_to(snap)<45:view.position+=0.22*(snap-point)
    get_viewport().set_input_as_handled()
 
 func _cancel_drag() -> void:
@@ -1391,15 +1440,30 @@ func _shift_requested() -> void:
  # Input is locked for this entire animation; keep one stable view list.
  var shuffled_views: Array = views.values()
  var center := Vector2(800,450) - Card.CARD_SIZE * 0.5
- var gather := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+ var last_flip: Tween
+ var flip_index:=0
  for view in shuffled_views:
   view.stop_motion();view.locked=true;view.set_selected(false)
-  view.conceal(textures["shift_reverse"],light_ink if bool(view.data.dark) else dark_ink)
+  var ink: ShaderMaterial=light_ink if bool(view.data.dark) else dark_ink
+  if reduced_motion:
+   view.conceal(textures["shift_reverse"],ink)
+  else:
+   var flip:=create_tween()
+   flip.tween_interval(flip_index*0.018)
+   flip.tween_property(view,"scale",Vector2(0.04,1.0),0.065).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+   flip.tween_callback(view.conceal.bind(textures["shift_reverse"],ink))
+   flip.tween_property(view,"scale",Vector2.ONE,0.09).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+   last_flip=flip
+  flip_index+=1
+ if last_flip:await last_flip.finished
+ var gather := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+ for view in shuffled_views:
   view.z_index=90
-  gather.tween_property(view,"position",center,0.10 if reduced_motion else 0.22)
-  gather.tween_property(view,"rotation",0.0,0.16)
-  gather.tween_property(view,"scale",Vector2.ONE,0.16)
+  gather.tween_property(view,"position",center,0.10 if reduced_motion else 0.16)
+  gather.tween_property(view,"rotation",0.0,0.1)
+  gather.tween_property(view,"scale",Vector2.ONE,0.1)
  await gather.finished
+ if not reduced_motion:await get_tree().create_timer(0.035).timeout
  shuffle_phase="shuffle"
  for pass_index in range(2):
   var cut := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
@@ -1419,8 +1483,11 @@ func _shift_requested() -> void:
  for i in range(model.hand.size()):
   var view: LyncoCardView = views[int(model.hand[i].uid)]
   view.z_index=90+i
-  deal.tween_property(view,"position",view.rest_position,0.1 if reduced_motion else 0.23).set_delay(i*0.025)
-  deal.tween_property(view,"rotation",view.rest_rotation,0.1 if reduced_motion else 0.23).set_delay(i*0.025)
+  deal.tween_property(view,"position",view.rest_position,0.1 if reduced_motion else 0.20).set_delay(i*(0.012 if reduced_motion else 0.025))
+  deal.tween_property(view,"rotation",view.rest_rotation,0.1 if reduced_motion else 0.20).set_delay(i*(0.012 if reduced_motion else 0.025))
+  view.back_logo.pivot_offset=view.back_logo.size*0.5
+  view.back_logo.scale=Vector2.ONE if reduced_motion else Vector2.ONE*0.88
+  deal.tween_property(view.back_logo,"scale",Vector2.ONE,0.1 if reduced_motion else 0.18).set_trans(Tween.TRANS_BACK).set_delay(i*(0.012 if reduced_motion else 0.025))
  await deal.finished
  for view in shuffled_views: view.locked=false;view.z_index=0
  shuffle_phase="idle";busy=false;_sync_ui()
@@ -1488,6 +1555,16 @@ func _hover_placed_direction(point: Vector2) -> void:
 
 func _set_reduced_motion(value: bool) -> void:
  reduced_motion=value
+ table.reduced_motion=value
+ table.select_influence(Table.INVALID)
+ for view in views.values():
+  view.reduced_motion=value
+  if not view.locked:view.update_pose()
+ for key in hud_tweens:
+  if hud_tweens[key].is_valid():hud_tweens[key].kill()
+  hud_values[key].scale=Vector2.ONE
+ if turn_motion and turn_motion.is_valid():turn_motion.kill()
+ turn_caption.position=Vector2(28,14)
  hover_direction.set_reduced_motion(value)
  inspector_diagram.set_reduced_motion(value)
  table.direction_material.set_shader_parameter("reduced_motion",value)
