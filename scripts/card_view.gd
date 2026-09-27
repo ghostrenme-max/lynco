@@ -15,6 +15,7 @@ const PEER_SCALE: float = 1.0 / 1.5
 var uid: int = -1
 var data: Dictionary = {}
 var rest_position := Vector2.ZERO
+var drag_retracted := false
 var rest_rotation: float = 0.0
 var selected: bool = false
 var hover: bool = false
@@ -130,14 +131,14 @@ func _exited() -> void:
  focus_changed.emit(uid, false)
 
 func _has_point(point: Vector2) -> bool:
- if locked: return false
+ if locked or drag_retracted: return false
  # Keep each card's neutral slot clickable when its visual shrinks. The hit
  # region must not shrink away from the pointer and repeatedly toggle hover.
  var in_slot: bool = Rect2(rest_position, CARD_SIZE).has_point(get_transform() * point)
  return in_slot or (hover and Rect2(Vector2.ZERO, CARD_SIZE).has_point(point))
 
 func contains_hand_point(point: Vector2) -> bool:
- if locked: return false
+ if locked or drag_retracted: return false
  if Rect2(rest_position, CARD_SIZE).has_point(point): return true
  return hover and Rect2(Vector2.ZERO, CARD_SIZE).has_point(get_transform().affine_inverse() * point)
 
@@ -167,6 +168,9 @@ func update_pose(duration: float = 0.13) -> void:
  if movement and movement.is_valid(): movement.kill()
  var target_scale: float = HOVER_SCALE if hover else (PEER_SCALE if diminished else 1.0)
  var lift: float = -32.0 if hover else (CARD_SIZE.y * (1.0 - PEER_SCALE) * 0.5 if diminished else (-16.0 if selected else 0.0))
+ if drag_retracted:
+  target_scale=1.0
+  lift=200.0
  z_index = 80 if hover else (40 if selected and not diminished else 0)
  movement = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
  var settle_time: float=0.07 if reduced_motion else maxf(duration,0.18)

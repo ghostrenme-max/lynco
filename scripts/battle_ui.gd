@@ -129,6 +129,9 @@ func _ready() -> void:
  stage = Control.new(); stage.size = Vector2(1600, 900); stage.mouse_filter = Control.MOUSE_FILTER_IGNORE; overlay.add_child(stage)
  table=get_parent().get_node("TableWorld")
  table.ui_stage=stage
+ table.placement_camera=preload("res://scripts/placement_camera.gd").new()
+ table.placement_camera.ui=self
+ add_child(table.placement_camera)
  _build_ui()
  resized.connect(_fit_stage)
  _fit_stage()
@@ -1052,7 +1055,9 @@ func _input(event: InputEvent) -> void:
    drag_uid=press_uid
    _clear_hand_focus()
    for other_uid in views:
-    if other_uid!=drag_uid:views[other_uid].update_pose()
+    if other_uid!=drag_uid:
+     views[other_uid].drag_retracted=true
+     views[other_uid].update_pose()
    var view:LyncoCardView=views[drag_uid]
    view.stop_motion();view.locked=true;view.z_index=150
    view.rotation=0;view.scale=Vector2.ONE*Card.HOVER_SCALE
@@ -1069,6 +1074,11 @@ func _input(event: InputEvent) -> void:
    get_viewport().set_input_as_handled()
 
 func _cancel_drag() -> void:
+ if table and table.placement_camera:table.placement_camera.restore()
+ for hand_view in views.values():
+  if hand_view.drag_retracted:
+   hand_view.drag_retracted=false
+   hand_view.update_pose()
  press_uid=-1
  if drag_uid>=0 and views.has(drag_uid):
   var view:LyncoCardView=views[drag_uid]
@@ -1126,8 +1136,9 @@ func _verify_table() -> void:
  await get_tree().create_timer(0.2).timeout
  for hand_view in views.values():assert(hand_view.scale.is_equal_approx(Vector2.ONE))
  _test_pointer(end,true)
- assert(preview_kind.text.contains("테이블에 배치됨") and inspector_open)
- _close_inspector()
+ assert(table.card_focus_active and not inspector_open)
+ table.dismiss_card_focus()
+ await get_tree().create_timer(0.24).timeout
  # Use an attack via the keyboard/button path, retaining existing combat effects.
  for entry in model.hand.duplicate():
   if str(Catalog.table_card(entry.id).effect)=="damage":

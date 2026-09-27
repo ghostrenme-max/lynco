@@ -11,6 +11,7 @@ const CARD_OBJECT = preload("res://scenes/card_3d.tscn")
 var ui_stage: Control
 var world: Node3D
 var camera: Camera3D
+var placement_camera: Node
 @export_range(1.0, 20.0) var look_yaw_limit_degrees: float = 12.0
 @export_range(1.0, 12.0) var look_pitch_limit_degrees: float = 7.0
 @export var look_sensitivity: float = 0.002
@@ -154,6 +155,7 @@ func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = fals
  _refresh_battle_grid()
 
 func clear_cards() -> void:
+ if placement_camera:placement_camera.restore()
  select_influence(INVALID)
  set_hover_card(INVALID)
  for tween in animations:
@@ -175,12 +177,14 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
  back_materials[id]=material
 
 func look_by(relative: Vector2) -> void:
+ if placement_camera and (placement_camera.active or placement_camera.returning):return
  if opponent_view or top_view or card_focus_active or card_focus_returning:return
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
 
 func reset_look() -> void:
+ if placement_camera:placement_camera.restore()
  select_influence(INVALID)
  if top_view:set_top_view(false)
  if camera_transition and camera_transition.is_valid():camera_transition.kill()
@@ -203,6 +207,7 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
   holder.add_child(arrow)
 
 func pan_by(direction: Vector2, delta: float) -> void:
+ if placement_camera and (placement_camera.active or placement_camera.returning):return
  if opponent_view or top_view or card_focus_active or card_focus_returning:return
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
@@ -348,6 +353,7 @@ func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int
  show_opponent_hand(hand_after)
 
 func set_opponent_view(enabled: bool, quick: bool = false) -> void:
+ if placement_camera:placement_camera.restore()
  if top_view:set_top_view(false)
  select_influence(INVALID)
  if enabled==opponent_view:return
@@ -476,6 +482,7 @@ func dismiss_card_focus() -> void:
  card_focus_tween.finished.connect(func():card_focus_returning=false)
 
 func click_influence(cell: Vector2i) -> void:
+ if placement_camera:placement_camera.restore()
  if card_focus_active:
   dismiss_card_focus()
   return
@@ -542,6 +549,7 @@ func select_influence(cell: Vector2i) -> void:
   influence_tween.tween_property(battle_grid_material,"shader_parameter/influence_reveal",1.0,0.22)
 
 func set_top_view(enabled: bool) -> void:
+ if placement_camera:placement_camera.restore()
  if top_view==enabled:return
  restore_card_focus()
  if enabled:
