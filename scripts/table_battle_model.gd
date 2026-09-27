@@ -115,7 +115,7 @@ func conserved() -> bool:
   if record.owner != "player": continue
   if ids.has(record.entry.uid): return false
   ids[record.entry.uid] = true
- return ids.size() == total_cards and energy >= 0 and hand.size() <= 7 and placed.size() <= CAPACITY
+ return ids.size() == total_cards and energy >= 0 and hand.size() <= int(Catalog.CHARACTER.hand_limit) and placed.size() <= CAPACITY
 
 func claim_reward() -> int:
  if not finished or reward_claimed: return 0

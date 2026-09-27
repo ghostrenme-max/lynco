@@ -16,6 +16,12 @@ const MUTED := Color("606460")
 const YELLOW := Color("f5d335")
 const DECK_ORIGIN := Vector2(44, 655)
 const DISCARD_ORIGIN := Vector2(1432, 665)
+const PILE_HEIGHT_SCALE := 1.15
+const PILE_SIZE := Vector2(124,172*PILE_HEIGHT_SCALE)
+const PILE_RETREAT := Vector2(0,44)
+var pile_views: Array[Control] = []
+var pile_positions: Array[Vector2] = []
+var pile_motion: Tween
 # Card center aligns with the left deck center (66 + 83 / 2).
 # Rise vertically above that deck, then deal rightward into the hand.
 const DRAW_STACK := Vector2(28.5, 450)
@@ -290,7 +296,7 @@ func _build_ui() -> void:
 
 
  hand_label = _label(stage,"0 / 0",Vector2(89,88),Vector2(210,45),28,Color("252c28"))
- hand_label.tooltip_text="현재 손패 / 전체 내 카드 수"
+ hand_label.tooltip_text="현재 손패 / 전체 내 카드 수 · 손패 최대 %d장" % int(Catalog.CHARACTER.hand_limit)
  for count_label in [garnet_label,hand_label]:
   count_label.add_theme_color_override("font_color",Color("252c28"))
   count_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
@@ -359,16 +365,32 @@ func _build_ui() -> void:
  performance_timer.timeout.connect(_update_performance); add_child(performance_timer)
 
 func _build_pile(pos: Vector2, black: bool) -> void:
+ var pile:=Control.new()
+ pile.position=pos-Vector2(0,PILE_SIZE.y-172)
+ pile.size=PILE_SIZE;pile.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ stage.add_child(pile)
+ pile_views.append(pile);pile_positions.append(pile.position)
  for i in range(3,-1,-1):
-  _panel(stage,pos+Vector2(-i*4,i*4),Vector2(124,172),INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
+  _panel(pile,Vector2(-i*4,i*4),PILE_SIZE,INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
  var back := TextureRect.new()
- back.position=pos; back.size=Vector2(124,172)
+ back.size=PILE_SIZE
  back.texture=textures["back_black" if black else "back_white"]
  back.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
  back.stretch_mode=TextureRect.STRETCH_SCALE
- back.material=Card.BLACK_BACK_MATERIAL if black else Card.BACK_MATERIAL
+ var pile_material: ShaderMaterial=(Card.BLACK_BACK_MATERIAL if black else Card.BACK_MATERIAL).duplicate()
+ pile_material.set_shader_parameter("logo_height_scale",PILE_HEIGHT_SCALE)
+ back.material=pile_material
  back.mouse_filter=Control.MOUSE_FILTER_IGNORE
- stage.add_child(back)
+ pile.add_child(back)
+
+func _set_piles_retracted(enabled: bool, instant: bool = false) -> void:
+ if pile_motion and pile_motion.is_valid():pile_motion.kill()
+ if not instant:
+  pile_motion=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+ for i in range(pile_views.size()):
+  var target: Vector2=pile_positions[i]+(PILE_RETREAT if enabled else Vector2.ZERO)
+  if instant:pile_views[i].position=target
+  else:pile_motion.tween_property(pile_views[i],"position",target,0.14 if reduced_motion else 0.46)
 
 func _build_overlays() -> void:
  result_panel=_panel(stage,Vector2(470,234),Vector2(660,350),Color("fafbf6"),18,Color("c8cfbd"))
@@ -390,6 +412,7 @@ func _build_overlays() -> void:
 
 func _restart(new_seed: int) -> void:
  if busy and not views.is_empty(): return
+ _set_piles_retracted(false,true)
  _close_inspector();_stop_look();table.reset_look();stage.show()
  table.clear_cards();press_uid=-1;drag_uid=-1
  busy=true; selected_uid=-1; inspect_uid=-1; hovered_uid=-1
@@ -619,6 +642,7 @@ func _end_turn() -> void:
  var result: Dictionary=model.end_turn()
  table.show_opponent_hand(int(result.hand_count))
  _hide_hover_direction();camera_keys.clear()
+ _set_piles_retracted(true)
  await table.set_opponent_view(true,reduced_motion)
  for record in result.placements:
   var cell: Vector2i = table.next_cell()
@@ -626,6 +650,7 @@ func _end_turn() -> void:
   await table.play_opponent(str(record.entry.id),cell,int(record.hand_before),int(record.hand_after),reduced_motion)
  table.show_opponent_hand(0)
  await get_tree().create_timer(0.06 if reduced_motion else 0.18).timeout
+ _set_piles_retracted(false)
  await table.set_opponent_view(false,reduced_motion)
  if not model.finished:table.show_opponent_hand(5)
  _sync_ui()
@@ -675,7 +700,7 @@ func _sync_ui() -> void:
  menu_button.disabled=busy or leaving_battle
  end_button.disabled=busy or model.finished
  end_button.text="진행 중…" if busy else "턴 종료"
- reset_button.disabled=busy;draw_button.disabled=busy or model.finished or model.hand.size()>=7
+ reset_button.disabled=busy;draw_button.disabled=busy or model.finished or model.hand.size()>=int(Catalog.CHARACTER.hand_limit)
  seed_box.editable=not busy
  for uid in views:
   var reason:=model.unavailable_reason(uid)
