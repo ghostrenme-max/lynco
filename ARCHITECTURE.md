@@ -17,6 +17,7 @@
 | 테이블 | `table_view.gd`, `table_decoration.gd` | 배치/거울/영향/카메라와 장식 생성 분리. 거울은 점수에 추가되지 않는다. |
 | 카메라 | `placement_camera.gd` | 드래그 중 확대와 복귀. 기준 시점으로 raycast하여 카메라 이동 피드백 방지. |
 | 공통 UI | `screen_style.gd`, `rolling_number_label.gd`, `direction_diagram.gd`, `turn_track.gd` | 스타일, 숫자 롤링, 방향 시연, 진행 파동. |
+| 전투 알림 | `notification_popup.gd` | 전투 1~2줄 알림의 둥근 평행사변형·펼침/접힘·교체/정리. 모델과 상점/결과창은 변경하지 않는다. |
 | 다른 화면 | `library_screen.gd`, `shop_screen.gd`, `inventory_panel.gd` | 메뉴/도감, 덱 상점, 보유 아이템. |
 | 창/확인 | `window_controls.gd`, `card_symbol_preview.gd` | 전역 전체화면, 원본 심볼 확인 씬. |
 | 보존한 구형 표시 | `board.gd`, `meter.gd` | 현재 전투 씬에서 참조하지 않는 프로토타입 표시. 외부 사용을 단정하지 않고 보존. |

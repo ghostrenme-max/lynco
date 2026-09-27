@@ -6,6 +6,7 @@ const Directions = preload("res://scripts/direction_preview.gd")
 const Symbols = preload("res://scripts/card_symbols.gd")
 const UI = preload("res://scripts/screen_style.gd")
 const Inspector = preload("res://scripts/card_inspector.gd")
+const Notification = preload("res://scripts/notification_popup.gd")
 
 const Model = preload("res://scripts/table_battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
@@ -98,8 +99,7 @@ var reset_button: Button
 var draw_button: Button
 var seed_box: LineEdit
 var seed_label: Label
-var toast_label: Label
-var toast_tween: Tween
+var notification: Control
 var result_panel: Panel
 var result_title: Label
 var result_body: Label
@@ -316,10 +316,7 @@ func _build_ui() -> void:
  draw_button.tooltip_text="전투 규칙 외 시연 기능 · 덱에서 카드 1장을 뽑습니다."
  draw_button.pressed.connect(_demo_draw)
 
- toast_label = _label(stage,"",Vector2(345,110),Vector2(330,65),16)
- toast_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- toast_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- toast_label.z_index=70
+ notification=Notification.new();notification.position=Vector2(480,510);notification.size=Vector2(640,96);stage.add_child(notification)
  seed_label = _label(stage,"SEED",Vector2(1260,686),Vector2(55,22),12,MUTED)
  seed_box=LineEdit.new(); seed_box.position=Vector2(1322,680); seed_box.size=Vector2(140,34)
  seed_box.text="20260926"; seed_box.max_length=10; seed_box.add_theme_font_size_override("font_size",14)
@@ -360,7 +357,6 @@ func _build_ui() -> void:
  seed_label.add_theme_color_override("font_color",INK)
  help_panel.size.y=482
  for label in [hand_hint,deck_label,discard_label,exhaust_label,performance_label]:label.hide()
- toast_label.position=Vector2(325,185);toast_label.size=Vector2(650,45)
  performance_timer=Timer.new(); performance_timer.wait_time=0.5
  performance_timer.timeout.connect(_update_performance); add_child(performance_timer)
 
@@ -416,7 +412,7 @@ func _restart(new_seed: int) -> void:
  _close_inspector();_stop_look();table.reset_look();stage.show()
  table.clear_cards();press_uid=-1;drag_uid=-1
  busy=true; selected_uid=-1; inspect_uid=-1; hovered_uid=-1
- result_panel.hide(); help_panel.hide()
+ notification.clear();result_panel.hide();help_panel.hide()
  for view in views.values():
   view.stop_motion(); view.queue_free()
  views.clear()
@@ -721,17 +717,15 @@ func _sync_identity_counter() -> void:
  joker_count.text="조커 %d" % int(counts.joker)
 
 func _toast(message: String) -> void:
- if toast_tween and toast_tween.is_valid():toast_tween.kill()
- toast_label.text=message;toast_label.modulate.a=1.0
- toast_tween=create_tween()
- toast_tween.tween_interval(1.65)
- toast_tween.tween_property(toast_label,"modulate:a",0.0,0.2)
+ notification.reduced_motion=reduced_motion
+ notification.present(message)
 
 func _check_end() -> void:
  if not model.finished:return
  var reward: int = model.claim_reward()
  result_title.text="승리" if model.winner=="player" else ("무승부" if model.winner=="draw" else "패배")
  result_body.text="테이블 판정  %d : %d\n획득 골드 +%d · 상점에서 덱 해금\n%d턴 · 시드 %d" % [model.player_score,model.opponent_score,reward,model.turn,model.seed_value]
+ notification.clear()
  result_panel.show()
  _sync_ui()
 
