@@ -401,6 +401,7 @@ func _setup_atmosphere() -> void:
 # Visual adjacency preview only; it never applies card effects.
 var selected_cell := INVALID
 var influenced_cells: Array[Vector2i] = []
+var influence_range: Array[Vector2i] = []
 var influence_dim: ShaderMaterial
 var influence_glow: ShaderMaterial
 var influence_mesh: PlaneMesh
@@ -434,6 +435,7 @@ func select_influence(cell: Vector2i) -> void:
  for link in influence_links:link.hide()
  selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
  influenced_cells.clear()
+ influence_range.clear()
  if cards.has(selected_cell):
   var source: Node3D=cards[selected_cell]
   var id: String=str(source.get_meta("card_id"))
@@ -441,6 +443,8 @@ func select_influence(cell: Vector2i) -> void:
   var facing: int=-1 if str(source.get_meta("owner","player"))=="opponent" else 1
   for direction in Directions.for_definition(definition):
    var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])*facing
+   if target.x>=0 and target.x<COLS and target.y>=0 and target.y<ROWS:
+    influence_range.append(target)
    if cards.has(target):influenced_cells.append(target)
  for placed_cell in cards:
   for holder in [cards[placed_cell],mirror_cards[placed_cell]]:
@@ -448,6 +452,7 @@ func select_influence(cell: Vector2i) -> void:
    overlay.visible=selected_cell!=INVALID and placed_cell!=selected_cell
    overlay.material_override=influence_glow if placed_cell in influenced_cells else influence_dim
  _show_influence_links()
+ _refresh_battle_grid()
 
 func set_top_view(enabled: bool) -> void:
  if top_view==enabled:return
@@ -654,6 +659,9 @@ func _refresh_battle_grid() -> void:
   if str(cards[cell].get_meta("owner","player"))=="opponent":
    opponent_mask |= 1 << (cell.y*COLS+cell.x)
  battle_grid_material.set_shader_parameter("opponent_mask",opponent_mask)
+ var influence_mask: int=0
+ for cell in influence_range:influence_mask |= 1 << (cell.y*COLS+cell.x)
+ battle_grid_material.set_shader_parameter("influence_mask",influence_mask)
  var active: bool=not cards.is_empty() or preview_cell!=INVALID
  battle_grid.visible=active
  mirror_grid.visible=active and not top_view
