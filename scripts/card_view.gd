@@ -78,7 +78,7 @@ func setup(entry: Dictionary, definition: Dictionary, icon: Texture2D, material_
  var body := _label(str(data.text), Vector2(9, 162), Vector2(140, 30), 15, ink)
  body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
  var badge := preload("res://scripts/table_cost_badge.gd").new()
- badge.position = Vector2(117,190); badge.size = Vector2(34,34)
+ badge.position = Vector2(68,204); badge.size = Vector2(82,20)
  badge.value = str(data.get("table_cost","—")); badge.dark = dark
  add_child(badge)
  reason_label = _label("", Vector2(6,201), Vector2(110,22), 10, Color("b87230"))

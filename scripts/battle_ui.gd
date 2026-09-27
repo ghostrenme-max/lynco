@@ -1286,17 +1286,17 @@ func _build_card_inspector() -> void:
  inspector_styles[false]=_style(Color("fefefb"),24,Color("c5c8c1"),1)
  inspector_styles[true]=_style(Color("181a19"),24,Color("454943"),1)
  preview_cost=_label(inspector_card,"",Vector2(24,24),Vector2(50,58),42)
- preview_title=_label(inspector_card,"",Vector2(87,30),Vector2(320,48),32)
+ preview_title=_label(inspector_card,"",Vector2(87,30),Vector2(188,48),32)
  preview_kind=_label(inspector_card,"",Vector2(87,84),Vector2(322,28),18)
  preview_icon=_icon(inspector_card,"eye",Vector2(130,145),Vector2(180,180))
  preview_text=_label(inspector_card,"",Vector2(30,358),Vector2(380,152),23)
  preview_text.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  preview_text.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- preview_effect=_label(inspector_card,"",Vector2(24,529),Vector2(316,52),19)
+ preview_effect=_label(inspector_card,"",Vector2(24,529),Vector2(392,52),19)
  preview_effect.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  preview_effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  inspector_score=preload("res://scripts/table_cost_badge.gd").new()
- inspector_score.position=Vector2(363,527);inspector_score.size=Vector2(54,54)
+ inspector_score.position=Vector2(285,28);inspector_score.size=Vector2(132,44)
  inspector_card.add_child(inspector_score)
  var hint:=_label(inspector_card,"우클릭 · Esc · 바깥 클릭으로 닫기",Vector2(20,587),Vector2(400,24),14)
  hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
@@ -1332,7 +1332,10 @@ func _show_inspector(data: Dictionary) -> void:
  inspector_diagram.configure(data,reduced_motion)
  direction_note.text="임시 방향 · 시각적 시연\n전투 효과는 적용하지 않습니다" if not Directions.for_definition(data).is_empty() else "이 카드의 방향은 미정입니다"
  inspector_score.dark=dark
- inspector_score.get_child(0).text=str(data.get("table_cost","—"))
+ inspector_score.replay_count(str(data.get("table_cost","—")),reduced_motion)
+ var title_font: Font=preview_title.get_theme_font("font")
+ var title_width: float=title_font.get_string_size(preview_title.text,HORIZONTAL_ALIGNMENT_LEFT,-1,32).x
+ preview_title.add_theme_font_size_override("font_size",mini(32,floori(32.0*188.0/maxf(title_width,1.0))))
  inspector_score.get_child(0).add_theme_color_override("font_color",ink)
  inspector_score.get_child(0).add_theme_font_size_override("font_size",23)
  inspector_score.queue_redraw()
@@ -1340,6 +1343,7 @@ func _show_inspector(data: Dictionary) -> void:
 
 func _close_inspector() -> void:
  if not inspector_open:return
+ inspector_score.stop_pulse()
  inspector_open=false;inspector_root.hide();press_uid=-1
  _clear_hand_focus()
 
@@ -1399,7 +1403,14 @@ func _verify_inspector() -> void:
  _notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
  assert(not inspector_open)
  await get_tree().process_frame
- assert(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==baseline_nodes)
+ # Number labels allocate reusable reels on their first value change.
+ var warmed_nodes: int=int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+ assert(warmed_nodes>=baseline_nodes)
+ for repeat in range(3):
+  _test_inspect_card(int(model.hand[0].uid))
+  _close_inspector()
+  await get_tree().process_frame
+ assert(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==warmed_nodes)
  _test_look_mouse(true,Vector2(30,20));assert(looking)
  _test_look_mouse(false);assert(not looking)
  assert(state==JSON.stringify([model.hand,model.energy,model.turn,model.discard]))

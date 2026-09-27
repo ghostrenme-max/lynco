@@ -1,34 +1,57 @@
 extends Control
 
 var value: String = "—"
-var dark: bool = false
+var dark := false
+var pulse: Tween
+var pulse_index := -1
+var pulse_scale := 1.0:
+ set(next):
+  pulse_scale=next
+  queue_redraw()
 
 func _ready() -> void:
- mouse_filter = Control.MOUSE_FILTER_IGNORE
- var label := preload("res://scripts/rolling_number_label.gd").new()
- label.text = value
- label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
- label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
- label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
- label.add_theme_font_size_override("font_size", 15)
- label.add_theme_color_override("font_color", Color.WHITE if dark else Color("171a17"))
- label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+ mouse_filter=Control.MOUSE_FILTER_IGNORE
+ # Preserve builder access to the value, without rendering a numeric badge.
+ var label:=Label.new()
+ label.text=value
+ label.hide()
  add_child(label)
 
+func cube_count() -> int:
+ var text: String=get_child(0).text if get_child_count()>0 else value
+ return clampi(int(text),0,5) if text.is_valid_int() else 0
+
+func stop_pulse() -> void:
+ if pulse and pulse.is_valid():pulse.kill()
+ pulse_index=-1
+ pulse_scale=1.0
+
+func replay_count(target: String, quick: bool = false) -> void:
+ stop_pulse()
+ value=target
+ get_child(0).text=target
+ tooltip_text="가치 미정" if not target.is_valid_int() or int(target)<0 else "큐브 %s개" % target
+ queue_redraw()
+ var count:=cube_count()
+ if count==0:return
+ pulse=create_tween()
+ for i in range(count):
+  pulse.tween_callback(func():pulse_index=i)
+  pulse.tween_property(self,"pulse_scale",1.08 if quick else 1.3,0.05 if quick else 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+  pulse.tween_property(self,"pulse_scale",1.0,0.05 if quick else 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+ pulse.tween_callback(func():pulse_index=-1)
+
 func _draw() -> void:
- # Quadratic corner rounding on a regular hexagon, sampled once per redraw.
- var vertices: Array[Vector2] = []
- var points := PackedVector2Array()
- var center := size * 0.5
- var radius := minf(size.x,size.y) * 0.46
- for i in range(6): vertices.append(center + Vector2.from_angle(PI / 3.0 * i - PI / 2.0) * radius)
- for i in range(6):
-  var corner: Vector2 = vertices[i]
-  var a: Vector2 = corner.lerp(vertices[posmod(i-1,6)], 0.18)
-  var b: Vector2 = corner.lerp(vertices[(i+1)%6], 0.18)
-  for j in range(6):
-   var t: float = float(j)/5.0
-   points.append(a.lerp(corner,t).lerp(corner.lerp(b,t),t))
- draw_colored_polygon(points,Color("343735") if dark else Color("e5e7e0"))
- points.append(points[0])
- draw_polyline(points,Color("bfc4bc") if dark else Color("686d64"),1.0,true)
+ var count:=cube_count()
+ var edge:=minf(size.y*0.65,size.x/6.5)
+ var gap:=edge*1.28
+ for i in range(count):
+  var center:=Vector2(size.x-edge*0.7-gap*(count-1-i),size.y*0.5)
+  var radius:=edge*0.5*(pulse_scale if i==pulse_index else 1.0)
+  var points:=PackedVector2Array()
+  for j in range(6):points.append(center+Vector2.from_angle(PI/3*j-PI/2)*radius)
+  var ink:=Color("dec5ff") if dark else Color("62349a")
+  draw_colored_polygon(points,Color("a76de0") if dark else Color("b98ce5"))
+  points.append(points[0])
+  draw_polyline(points,ink,1.0,true)
+  for j in [1,3,5]:draw_line(center,points[j],ink,1.0,true)

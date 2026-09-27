@@ -5,7 +5,7 @@ extends Resource
 @export_multiline var description: String = ""
 @export var kind: String = ""
 @export var action_cost: int = -1
-@export var table_cost: int = -1
+@export_range(-1,5) var table_cost: int = -1
 @export var dark: bool = false
 @export var icon: Texture2D
 @export var face: String = "front"

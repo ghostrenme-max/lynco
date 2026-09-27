@@ -43,7 +43,7 @@ static func back_card(id: String) -> Dictionary:
  return _back_definitions[id]
 
 # Separate from action cost; temporary balance numbers for table adjudication.
-const TABLE_VALUES := {"strike":4,"observe":2,"guard":3,"echo":1,"cycle":1,"link":6}
+const TABLE_VALUES := {"strike":4,"observe":2,"guard":3,"echo":1,"cycle":1,"link":5}
 static func table_effect_text(id: String) -> String:
  match id:
   "observe", "echo": return "카드 1장 드로우"
