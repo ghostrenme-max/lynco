@@ -18,7 +18,7 @@ func click(button: Control) -> void:
   event.position=point; event.button_index=MOUSE_BUTTON_LEFT; event.pressed=down
   root.push_input(event,true)
  await settle()
-func key(code: int, down: bool) -> void:
+func key(code: Key, down: bool) -> void:
  var event := InputEventKey.new(); event.keycode=code; event.physical_keycode=code; event.pressed=down
  root.push_input(event,true)
 func run() -> void:

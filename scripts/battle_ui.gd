@@ -32,7 +32,7 @@ var drag_uid: int = -1
 var press_uid: int = -1
 var looking: bool = false
 var look_pointer := Vector2.ZERO
-var previous_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
+var previous_mouse_mode: Input.MouseMode = Input.MOUSE_MODE_VISIBLE
 var press_point := Vector2.ZERO
 var stage: Control
 var hand_layer: Control
@@ -388,11 +388,11 @@ func _animate_draw(drawn: Array) -> void:
   for index in range(drawn.size()):
    var view: LyncoCardView=views[int(drawn[index].uid)]
    var delay:float=index*(0.01 if reduced_motion else LIFT_GAP)
-   var duration:float=0.09 if reduced_motion else LIFT_TIME
+   var lift_duration:float=0.09 if reduced_motion else LIFT_TIME
    view.z_index=60+index
-   lift.tween_property(view,"position",DRAW_STACK+STACK_CARD_STEP*index,duration).set_delay(delay)
-   lift.tween_property(view,"rotation",deg_to_rad(STACK_FIRST_ANGLE+index*STACK_ANGLE_STEP),duration).set_delay(delay)
-   lift.tween_property(view,"scale",Vector2(0.84,0.84),duration).set_delay(delay)
+   lift.tween_property(view,"position",DRAW_STACK+STACK_CARD_STEP*index,lift_duration).set_delay(delay)
+   lift.tween_property(view,"rotation",deg_to_rad(STACK_FIRST_ANGLE+index*STACK_ANGLE_STEP),lift_duration).set_delay(delay)
+   lift.tween_property(view,"scale",Vector2(0.84,0.84),lift_duration).set_delay(delay)
    lift.tween_property(view,"modulate:a",1.0,0.045).set_delay(delay)
   await lift.finished
   deal_phase="stack"

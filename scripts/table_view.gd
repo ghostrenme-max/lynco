@@ -256,7 +256,7 @@ func show_opponent_hand(count: int) -> void:
 func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int, quick: bool) -> void:
  assert(free_cell(cell))
  show_opponent_hand(hand_before)
- var slot: int = maxi(0,(hand_before-1)/2)
+ var slot: int = maxi(0,floori(float(hand_before-1) / 2.0))
  var source: Node3D = opponent_fan[slot]
  var start: Vector3 = source.global_position
  var start_rotation: Vector3 = source.rotation

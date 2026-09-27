@@ -150,7 +150,7 @@ func _fill_page() -> void:
  for index in range(first, mini(first + page_size, ids.size())):
   var id: String = str(ids[index])
   var slot: int = index - first
-  var pos := Vector2(88 + (slot % 3) * 282, 240 + (slot / 3) * 304)
+  var pos := Vector2(88 + (slot % 3) * 282, 240 + floori(float(slot) / 3.0) * 304)
   _card(gallery, id, pos, 1.2)
   var button := UI.button(gallery, "", Rect2(pos - Vector2(9, 9), Vector2(208, 292)))
   button.tooltip_text = str(Catalog.table_card(id).name) + " · 상세 보기"

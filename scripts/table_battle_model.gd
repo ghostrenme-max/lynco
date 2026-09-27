@@ -81,9 +81,9 @@ func end_turn() -> Dictionary:
  while not finished:
   var best := -1
   for i in range(opponent_hand.size()):
-   var id: String = opponent_hand[i].id
-   if int(Catalog.card(id).cost) > budget: continue
-   if best < 0 or int(Catalog.TABLE_VALUES[id]) > int(Catalog.TABLE_VALUES[opponent_hand[best].id]): best = i
+   var candidate_id: String = opponent_hand[i].id
+   if int(Catalog.card(candidate_id).cost) > budget: continue
+   if best < 0 or int(Catalog.TABLE_VALUES[candidate_id]) > int(Catalog.TABLE_VALUES[opponent_hand[best].id]): best = i
   if best < 0: break
   var entry: Dictionary = opponent_hand[best]
   opponent_hand.remove_at(best)
