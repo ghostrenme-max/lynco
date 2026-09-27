@@ -76,6 +76,7 @@ func end_turn() -> Dictionary:
  _enemy_draw()
  var budget: int = int(Catalog.CHARACTER.energy)
  var moves: Array[Dictionary] = []
+ var hand_count: int = opponent_hand.size()
  # Seeded hand; deterministic greedy choice. No hidden score or free placements.
  while not finished:
   var best := -1
@@ -90,6 +91,7 @@ func end_turn() -> Dictionary:
   budget -= int(Catalog.card(id).cost)
   if id == "cycle": budget += 1
   var record := {"entry":entry,"owner":"opponent","reverse":false,"score":int(Catalog.TABLE_VALUES[id])}
+  record["hand_before"] = opponent_hand.size()+1
   placed.append(record); moves.append(record)
   opponent_score += int(record.score)
   _judge()
@@ -97,10 +99,11 @@ func end_turn() -> Dictionary:
    if opponent_deck.is_empty() and not opponent_discard.is_empty():
     opponent_deck.assign(opponent_discard); opponent_discard.clear(); _shuffle(opponent_deck)
    if not opponent_deck.is_empty(): opponent_hand.append(opponent_deck.pop_back())
+  record["hand_after"] = opponent_hand.size()
  opponent_discard.append_array(opponent_hand); opponent_hand.clear()
  if not finished:
   turn += 1; energy = int(Catalog.CHARACTER.energy); observed = false; block = 0
- return {"ok":true,"damage":0,"absorbed":0,"placements":moves,"drawn":[] if finished else fill_hand().drawn}
+ return {"ok":true,"damage":0,"absorbed":0,"placements":moves,"hand_count":hand_count,"drawn":[] if finished else fill_hand().drawn}
 
 func conserved() -> bool:
  var ids: Dictionary = {}

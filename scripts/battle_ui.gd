@@ -329,6 +329,7 @@ func _restart(new_seed: int) -> void:
   view.stop_motion(); view.queue_free()
  views.clear()
  model.reset(new_seed)
+ table.show_opponent_hand(5)
  var drawn: Array = model.fill_hand().drawn
  _sync_ui()
  await _animate_draw(drawn)
@@ -537,14 +538,19 @@ func _end_turn() -> void:
  for view in views.values():view.queue_free()
  views.clear()
  var result: Dictionary=model.end_turn()
+ table.show_opponent_hand(int(result.hand_count))
+ _hide_hover_direction();camera_keys.clear()
+ await table.set_opponent_view(true,reduced_motion)
  for record in result.placements:
   var cell: Vector2i = table.next_cell()
-  table.place(str(record.entry.id),cell,reduced_motion)
-  table.mark_owner(cell,"opponent")
-  await get_tree().create_timer(0.08 if reduced_motion else 0.22).timeout
+  _toast("상대 · %s" % str(Catalog.card(record.entry.id).name))
+  await table.play_opponent(str(record.entry.id),cell,int(record.hand_before),int(record.hand_after),reduced_motion)
+ table.show_opponent_hand(0)
+ await get_tree().create_timer(0.06 if reduced_motion else 0.18).timeout
+ await table.set_opponent_view(false,reduced_motion)
+ if not model.finished:table.show_opponent_hand(5)
  _sync_ui()
- _toast("상대 %d장 배치 · 내 차례" % result.placements.size())
- await get_tree().create_timer(0.08 if reduced_motion else 0.20).timeout
+ _toast("상대 %d장 배치 · %s" % [result.placements.size(),"판정" if model.finished else "내 차례"])
  await _animate_draw(result.drawn)
  busy=false;_sync_ui();_check_end()
 
