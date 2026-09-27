@@ -4,6 +4,7 @@ var value: String = "—"
 var dark := false
 var pulse: Tween
 var pulse_index := -1
+var revealed_count := -1
 var pulse_scale := 1.0:
  set(next):
   pulse_scale=next
@@ -24,6 +25,7 @@ func cube_count() -> int:
 func stop_pulse() -> void:
  if pulse and pulse.is_valid():pulse.kill()
  pulse_index=-1
+ revealed_count=-1
  pulse_scale=1.0
 
 func replay_count(target: String, quick: bool = false) -> void:
@@ -33,19 +35,25 @@ func replay_count(target: String, quick: bool = false) -> void:
  tooltip_text="가치 미정" if not target.is_valid_int() or int(target)<0 else "큐브 %s개" % target
  queue_redraw()
  var count:=cube_count()
+ revealed_count=0
  if count==0:return
  pulse=create_tween()
+ pulse.tween_interval(0.16)
  for i in range(count):
-  pulse.tween_callback(func():pulse_index=i)
-  pulse.tween_property(self,"pulse_scale",1.08 if quick else 1.3,0.05 if quick else 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-  pulse.tween_property(self,"pulse_scale",1.0,0.05 if quick else 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+  pulse.tween_callback(func():
+   pulse_index=i
+   revealed_count=i+1
+   queue_redraw())
+  pulse.tween_property(self,"pulse_scale",1.08 if quick else 1.5,0.05 if quick else 0.15).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+  pulse.tween_property(self,"pulse_scale",1.0,0.05 if quick else 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+  pulse.tween_interval(0.18)
  pulse.tween_callback(func():pulse_index=-1)
 
 func _draw() -> void:
  var count:=cube_count()
  var edge:=minf(size.y*0.65,size.x/6.5)
  var gap:=edge*1.28
- for i in range(count):
+ for i in range(count if revealed_count<0 else mini(count,revealed_count)):
   var center:=Vector2(size.x-edge*0.7-gap*(count-1-i),size.y*0.5)
   var radius:=edge*0.5*(pulse_scale if i==pulse_index else 1.0)
   var points:=PackedVector2Array()

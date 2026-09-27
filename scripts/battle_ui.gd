@@ -216,20 +216,20 @@ var turn_caption: Label
 var camera_keys: Dictionary = {}
 var inventory_layer: CanvasLayer
 func _build_ui() -> void:
- turn_board=_panel(stage,Vector2(600,20),Vector2(970,156),Color("171a18"),20)
+ turn_board=_panel(stage,Vector2(600,20),Vector2(970,266),Color("171a18"),20)
  turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
  turn_caption=_label(turn_board,"",Vector2(28,14),Vector2(710,32),22,Color("eeeee5"))
- table_status=_label(turn_board,"",Vector2(28,114),Vector2(700,25),16,Color("c4c7bd"))
- _label(table_status,"행동력",Vector2.ZERO,Vector2(58,25),16,Color("c4c7bd"))
- hud_values.energy=_label(table_status,"",Vector2(62,0),Vector2(24,25),16,Color("eeeee5"))
- _label(table_status,"/ 3",Vector2(90,0),Vector2(36,25),16,Color("c4c7bd"))
- _label(table_status,"점수",Vector2(152,0),Vector2(40,25),16,Color("c4c7bd"))
- hud_values.player_score=_label(table_status,"",Vector2(196,0),Vector2(48,25),16,Color("eeeee5"))
- _label(table_status,":",Vector2(246,0),Vector2(10,25),16,Color("c4c7bd"))
- hud_values.opponent_score=_label(table_status,"",Vector2(266,0),Vector2(48,25),16,Color("eeeee5"))
- _label(table_status,"배치",Vector2(344,0),Vector2(40,25),16,Color("c4c7bd"))
- hud_values.placed=_label(table_status,"",Vector2(392,0),Vector2(30,25),16,Color("eeeee5"))
- _label(table_status,"/ %d" % Model.CAPACITY,Vector2(426,0),Vector2(45,25),16,Color("c4c7bd"))
+ table_status=_label(turn_board,"",Vector2(22,218),Vector2(600,36),24,Color.WHITE)
+ _label(table_status,"테이블 배치 :",Vector2.ZERO,Vector2(155,36),24,Color.WHITE)
+ hud_values.placed=_label(table_status,"",Vector2(161,0),Vector2(65,36),24,Color.WHITE)
+ hud_values.energy=_label(turn_board,"",Vector2(783,64),Vector2(160,126),96,Color.WHITE)
+ hud_values.energy.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ hud_values.energy.add_theme_constant_override("outline_size",3)
+ hud_values.energy.add_theme_color_override("font_outline_color",Color.WHITE)
+ hud_values.energy.tooltip_text="내 턴에 남은 행동력"
+ hud_values.player_score=_label(table_status,"",Vector2.ZERO,Vector2(48,25),16,Color.WHITE)
+ hud_values.opponent_score=_label(table_status,"",Vector2.ZERO,Vector2(48,25),16,Color.WHITE)
+ hud_values.player_score.hide();hud_values.opponent_score.hide()
  turn_track=preload("res://scripts/turn_track.gd").new()
  turn_track.position=Vector2(26,52);turn_track.size=Vector2(714,52)
  turn_track.mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -277,7 +277,8 @@ func _build_ui() -> void:
  menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
  menu_button.pressed.connect(_return_to_main)
 
- end_button = _button(turn_board,"턴 종료 →",Vector2(767,87),Vector2(178,47),true)
+ end_button = _button(turn_board,"턴 종료",Vector2(790,204),Vector2(155,47),true)
+ end_button.add_theme_font_size_override("font_size",22)
  end_button.pressed.connect(_end_turn)
 
 
@@ -630,7 +631,7 @@ func _demo_draw() -> void:
 
 func _set_hud_value(key: String, value: int) -> void:
  var label: Label=hud_values[key]
- label.text=str(value)
+ label.text=("%02d" % value) if key=="energy" else str(value)
 
 func _sync_ui() -> void:
  if is_instance_valid(table_status):
@@ -660,7 +661,7 @@ func _sync_ui() -> void:
  shift_button.disabled=busy or model.finished or model.hand.is_empty()
  menu_button.disabled=busy or leaving_battle
  end_button.disabled=busy or model.finished
- end_button.text="연출 진행 중…" if busy else "턴 종료    →"
+ end_button.text="진행 중…" if busy else "턴 종료"
  reset_button.disabled=busy;draw_button.disabled=busy or model.finished or model.hand.size()>=7
  seed_box.editable=not busy
  for uid in views:

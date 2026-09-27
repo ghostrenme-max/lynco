@@ -16,21 +16,22 @@ func run() -> void:
  check(badge.position==Vector2(285,28),"cubes at upper right")
  check(not badge.get_child(0).visible,"numeric badge hidden")
  badge.replay_count("3")
+ check(badge.revealed_count==0,"starts with zero visible cubes")
  for i in range(1,4):
-  await create_timer(0.13 if i==1 else 0.28).timeout
+  await create_timer(0.31 if i==1 else 0.55).timeout
   check(badge.cube_count()==3 and badge.pulse_index==i-1,"sequential cubes")
-  check(badge.pulse_scale>1.05,"each cube enlarges")
- await create_timer(0.22).timeout
+  check(badge.revealed_count==i and badge.pulse_scale>1.4,"each cube enlarges to 1.5 with sequential reveal")
+ await create_timer(0.42).timeout
  check(is_equal_approx(badge.pulse_scale,1.0),"returns to original scale")
  badge.replay_count("5");await create_timer(0.1).timeout
- badge.replay_count("1");await create_timer(0.4).timeout
+ badge.replay_count("1");await create_timer(0.8).timeout
  check(badge.cube_count()==1 and badge.pulse_index==-1,"replay replaces previous animation")
  badge.replay_count("0");await create_timer(0.35).timeout
  check(badge.cube_count()==0 and badge.pulse_index==-1,"zero has no cubes")
  badge.replay_count("—")
  check(badge.cube_count()==0 and badge.pulse_index==-1,"unknown score is not invented")
  ui._close_inspector();ui._test_inspect_card(int(ui.model.hand[0].uid))
- await create_timer(0.13).timeout
+ await create_timer(0.31).timeout
  await RenderingServer.frame_post_draw
  root.get_texture().get_image().save_png("res://test-results/inspector_badge_pulse.png")
  ui._close_inspector()

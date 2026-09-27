@@ -33,7 +33,7 @@ func run() -> void:
   ui._set_hud_value("energy",1)
   ui._set_hud_value("energy",3)
   await create_timer(0.25).timeout
-  check(ui.hud_values.energy.scale.is_equal_approx(Vector2.ONE) and ui.hud_values.energy.text=="3","rapid numeric updates settle")
+  check(ui.hud_values.energy.scale.is_equal_approx(Vector2.ONE) and ui.hud_values.energy.text=="03","rapid numeric updates settle")
   ui.table.place("observe",Vector2i(2,1),false)
   ui.table.mark_owner(Vector2i(2,1),"player")
   await create_timer(0.42).timeout
