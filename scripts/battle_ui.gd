@@ -70,6 +70,10 @@ var hover_direction_tween: Tween
 var direction_hover_uid: int = -1
 var direction_hover_cell := Vector2i(-1,-1)
 var inspector_demo: Panel
+var inspector_comparison: Panel
+var comparison_bands: Array[ColorRect] = []
+var comparison_titles: Array[Label] = []
+var comparison_effects: Array[Label] = []
 var inspector_diagram: Control
 var direction_note: Label
 var fill_button: Button
@@ -985,7 +989,7 @@ func _input(event: InputEvent) -> void:
   if event is InputEventMouseButton:
    if event.pressed and event.button_index==MOUSE_BUTTON_LEFT and inspector_card.get_global_rect().has_point(event.position):
     _toggle_inspector_face()
-   elif event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
+   elif event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position) and not (inspector_comparison.visible and inspector_comparison.get_global_rect().has_point(event.position)))):
     _close_inspector()
    get_viewport().set_input_as_handled();return
   if event is InputEventMouseMotion:
@@ -1320,6 +1324,23 @@ func _build_card_inspector() -> void:
  inspector_demo.add_child(inspector_diagram)
  direction_note=_label(inspector_demo,"",Vector2(22,326),Vector2(306,46),16,Color("c5c8c1"))
  direction_note.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ inspector_comparison=_panel(inspector_root,Vector2.ZERO,Vector2(350,620),Color("161b18"),18)
+ for i in range(2):
+  var band:=ColorRect.new()
+  band.position=Vector2(14,14+i*302);band.size=Vector2(322,290)
+  band.mouse_filter=Control.MOUSE_FILTER_IGNORE
+  inspector_comparison.add_child(band)
+  comparison_bands.append(band)
+  var heading:=_label(inspector_comparison,"",Vector2(28,32+i*302),Vector2(294,68),22)
+  heading.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+  comparison_titles.append(heading)
+  var effect:=_label(inspector_comparison,"",Vector2(28,110+i*302),Vector2(294,172),21)
+  effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+  comparison_effects.append(effect)
+ var separator:=ColorRect.new()
+ separator.position=Vector2(28,309);separator.size=Vector2(294,1)
+ separator.color=Color("434c46");separator.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ inspector_comparison.add_child(separator)
  get_viewport().size_changed.connect(_fit_inspector)
  _fit_inspector();inspector_root.hide()
 
@@ -1331,6 +1352,8 @@ func _fit_inspector() -> void:
  inspector_card.position=(viewport_size-inspector_card.size*ratio)*0.5
  inspector_demo.scale=Vector2.ONE*ratio
  inspector_demo.position=viewport_size*0.5+Vector2(260,-193)*ratio
+ inspector_comparison.scale=Vector2.ONE*ratio
+ inspector_comparison.position=viewport_size*0.5+Vector2(-610,-310)*ratio
 
 func _show_inspector(data: Dictionary) -> void:
  if not inspector_reverse:
@@ -1354,6 +1377,19 @@ func _show_inspector(data: Dictionary) -> void:
  inspector_score.get_child(0).add_theme_font_size_override("font_size",23)
  inspector_score.queue_redraw()
  inspector_open=true;inspector_root.show()
+ _refresh_inspector_comparison(data)
+
+func _refresh_inspector_comparison(data: Dictionary) -> void:
+ inspector_comparison.visible=str(data.get("identity","normal")) not in ["king","joker"]
+ if not inspector_comparison.visible or not Catalog.CARDS.has(inspector_source_id):return
+ var definitions: Array[Dictionary]=[Catalog.table_card(inspector_source_id),Catalog.back_card(inspector_source_id)]
+ for i in range(2):
+  var active: bool=inspector_reverse==(i==1)
+  comparison_bands[i].color=Color("303832") if active else Color("111612")
+  comparison_titles[i].text=("앞면" if i==0 else "뒷면")+" · "+str(definitions[i].name)
+  comparison_titles[i].add_theme_color_override("font_color",Color("f5f7f2") if active else Color("6e7a71"))
+  comparison_effects[i].text=Catalog.table_effect_text(inspector_source_id) if i==0 else str(definitions[i].text)
+  comparison_effects[i].add_theme_color_override("font_color",Color("f0f3ec") if active else Color("929d94"))
 
 func _toggle_inspector_face() -> void:
  if not Catalog.CARDS.has(inspector_source_id):return

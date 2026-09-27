@@ -24,8 +24,8 @@ WindowControls="*res://scripts/window_controls.gd"
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
-window/size/window_width_override=1440
-window/size/window_height_override=810
+window/size/window_width_override=1920
+window/size/window_height_override=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/size/min_width=1280
