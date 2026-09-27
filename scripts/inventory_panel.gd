@@ -103,11 +103,13 @@ func refresh() -> void:
   source_label.text=""
   description_label.text="일반 상점이나 암시장에서 획득한 아이템이 여기에 표시됩니다."
  else:
-  select_item(clampi(selected_index,0,Session.items.size()-1))
-  _layout_items(false)
+  select_item(clampi(selected_index,0,Session.items.size()-1),true)
 
-func select_item(index: int) -> void:
+func select_item(index: int, refresh_details: bool = false) -> void:
  if index<0 or index>=Session.items.size():return
+ if index==selected_index and not refresh_details:
+  item_buttons[index].set_pressed_no_signal(true)
+  return
  selected_index=index
  var entry: Dictionary=Session.items[index]
  title_label.text=str(entry.get("name","아이템"))
@@ -118,7 +120,7 @@ func select_item(index: int) -> void:
  placeholder.text="◇";placeholder.visible=preview.texture==null
  for i in range(item_buttons.size()):item_buttons[i].set_pressed_no_signal(i==index)
  scroll_bar.set_value_no_signal(index)
- _layout_items(true)
+ _layout_items(not refresh_details)
 
 func _input(event: InputEvent) -> void:
  if event is InputEventMouseButton and event.pressed:

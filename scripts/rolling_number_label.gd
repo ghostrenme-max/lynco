@@ -7,6 +7,10 @@ var initialized := false
 var reels: Array[Control] = []
 var number_material: ShaderMaterial
 var changing := false
+var tokens: Array[RegExMatch] = []
+var layout_dirty := false
+var active_mask := 0
+var layout_updates := 0
 
 class Reel extends Control:
  class Ink extends Control:
@@ -80,20 +84,32 @@ func _ready() -> void:
   number_pattern=RegEx.new()
   number_pattern.compile("[0-9]+(?:\\.[0-9]+)?")
  observed_text=text
+ tokens=number_pattern.search_all(text)
  initialized=not text.is_empty()
- resized.connect(_layout_reels)
+ resized.connect(_invalidate_layout)
+ theme_changed.connect(_invalidate_layout)
+ draw.connect(_invalidate_layout)
+
+func _invalidate_layout() -> void:
+ layout_dirty=true
 
 func _process(_delta: float) -> void:
  if text!=observed_text:
   _change_text()
  if changing:
-  _layout_reels()
-  changing=reels.any(func(reel):return reel.active)
+  var next_mask := 0
+  for i in range(reels.size()):
+   if reels[i].active:next_mask |= 1 << i
+  if layout_dirty or next_mask!=active_mask:
+   active_mask=next_mask
+   _layout_reels()
+  changing=next_mask!=0
   if not changing and number_material:number_material.set_shader_parameter("mask_count",0)
 
 func _change_text() -> void:
- var before: Array[RegExMatch]=number_pattern.search_all(observed_text)
+ var before: Array[RegExMatch]=tokens
  var after: Array[RegExMatch]=number_pattern.search_all(text)
+ tokens=after
  var animate: bool=initialized and is_visible_in_tree() and before.size()==after.size()
  observed_text=text;initialized=true
  if not animate:
@@ -116,13 +132,14 @@ func _change_text() -> void:
  _layout_reels()
 
 func _layout_reels() -> void:
+ layout_dirty=false
  if number_material==null:return
- var matches: Array[RegExMatch]=number_pattern.search_all(text)
+ layout_updates+=1
  var masks:=PackedVector4Array()
  for i in range(reels.size()):
   var reel=reels[i]
-  if not reel.active or i>=matches.size():continue
-  var token: RegExMatch=matches[i]
+  if not reel.active or i>=tokens.size():continue
+  var token: RegExMatch=tokens[i]
   var bounds: Rect2=get_character_bounds(token.get_start())
   for character in range(token.get_start()+1,token.get_end()):bounds=bounds.merge(get_character_bounds(character))
   if not bounds.has_area():reel.finish();continue

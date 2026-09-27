@@ -12,15 +12,9 @@ var pulse_scale := 1.0:
 
 func _ready() -> void:
  mouse_filter=Control.MOUSE_FILTER_IGNORE
- # Preserve builder access to the value, without rendering a numeric badge.
- var label:=Label.new()
- label.text=value
- label.hide()
- add_child(label)
 
 func cube_count() -> int:
- var text: String=get_child(0).text if get_child_count()>0 else value
- return clampi(int(text),0,5) if text.is_valid_int() else 0
+ return clampi(int(value),0,5) if value.is_valid_int() else 0
 
 func stop_pulse() -> void:
  if pulse and pulse.is_valid():pulse.kill()
@@ -31,7 +25,6 @@ func stop_pulse() -> void:
 func replay_count(target: String, quick: bool = false) -> void:
  stop_pulse()
  value=target
- get_child(0).text=target
  tooltip_text="가치 미정" if not target.is_valid_int() or int(target)<0 else "큐브 %s개" % target
  queue_redraw()
  var count:=cube_count()

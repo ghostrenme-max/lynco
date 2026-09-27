@@ -33,7 +33,7 @@ func run() -> void:
   check(particles.emission_sphere_radius+particles.initial_velocity_max*particles.lifetime<0.4,"travel stays inside cube")
   check(particles.color_ramp.sample(1.0).a==0.0,"particles disappear at end of short travel")
  check(ui.turn_track.occupied==ui.model.placed.size(),"progress from model")
- check(not ui.menu_button.visible,"top left arrow removed")
+ check(not ui.menu_button.is_visible_in_tree() and ui.menu_button.get_parent()==ui.help_panel,"return arrow absent from battlefield and available in help")
  check(ui.table.COLS==6 and ui.table.ROWS==5 and ui.Model.CAPACITY==30,"6 by 5 wide playable board")
  check(not ui.table.black_market_open and not ui.table.get_node("Distributors/BlackMarket/ActiveLight").visible,"black market idle")
  for y in range(5):

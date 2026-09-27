@@ -14,7 +14,7 @@ func run() -> void:
  check(ui.inspector_open,"right click opens inspector")
  var badge=ui.inspector_score
  check(badge.position==Vector2(285,28),"cubes at upper right")
- check(not badge.get_child(0).visible,"numeric badge hidden")
+ check(badge.get_child_count()==0,"cube value needs no hidden numeric label")
  badge.replay_count("3")
  check(badge.revealed_count==0,"starts with zero visible cubes")
  for i in range(1,4):

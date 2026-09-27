@@ -126,6 +126,11 @@ func _run() -> void:
    ui.model.finished = true
    ui._sync_ui()
    _check(not ui.menu_button.disabled, "return available after battle end")
+  var help := InputEventKey.new()
+  help.keycode=KEY_F1;help.pressed=true
+  root.push_input(help,true)
+  await _settle()
+  _check(ui.menu_button.is_visible_in_tree(), "return reachable through help")
   await _click(ui.menu_button)
   _check(current_scene.name == "MainMenu", "battle to main " + str(iteration))
   _check(root.get_child_count() == main_nodes, "no retained root scenes " + str(iteration))

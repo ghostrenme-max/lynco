@@ -43,6 +43,9 @@ func run() -> void:
  root.get_texture().get_image().save_png("res://test-results/drag_camera.png")
  ui._cancel_drag()
  check(not cam.active and t.camera.transform.is_equal_approx(original),"release restores exact previous view")
+ # A restored hand can land under the pointer; neutralize hover before checking
+ # the resting pose rather than a legitimate diminished sibling pose.
+ ui._test_pointer(Vector2(350,105))
  await create_timer(0.25).timeout
  for other in ui.views.values():
   check(not other.drag_retracted and other.position.y<other.rest_position.y+2,"cancel restores hand")

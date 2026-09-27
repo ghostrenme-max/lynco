@@ -71,6 +71,17 @@ func run() -> void:
  print("INK_COMPARE interior=",protected_pixels," changed=",changed_ink)
  check(changed_ink==0,"foreground stays opaque and does not fade into background")
  check(protected_pixels>100,"text and symbol pixels checked")
+ # The larger HUD covers some far-row cells. Use an exposed card for input,
+ # while keeping the original texture fixture above for the pixel comparison.
+ enemy_cell=table.INVALID
+ for cell in table.cards:
+  var candidate: Node3D=table.cards[cell]
+  if candidate.get_meta("owner")=="opponent" and not ui.Catalog.card(candidate.get_meta("card_id")).dark and not ui.turn_board.get_rect().has_point(table.screen_position(cell)):
+   enemy_cell=cell
+ check(enemy_cell!=table.INVALID,"opponent input target is not behind HUD")
+ id=str(table.cards[enemy_cell].get_meta("card_id"))
+ normal=table.materials[id]
+ dim=table.materials["opponent:"+id]
  var state: String=JSON.stringify([ui.model.placed,ui.model.energy,ui.model.player_score,ui.model.opponent_score,ui.model.rng.state])
  root.size=Vector2i(1280,720)
  await process_frame

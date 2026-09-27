@@ -47,6 +47,12 @@ func run() -> void:
   var wheel:=InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN;wheel.pressed=true
   root.push_input(wheel,true)
  assert(panel.selected_index==7)
+ var edge_motion: Tween=panel.carousel_tween
+ panel.select_item(7)
+ assert(panel.carousel_tween==edge_motion,"same selection does not restart motion")
+ panel.item_buttons[7].set_pressed_no_signal(false)
+ panel.select_item(7)
+ assert(panel.item_buttons[7].button_pressed,"clicking current selection cannot toggle it off")
  await create_timer(0.25).timeout
  assert(panel.item_buttons[7].position.y+59==panel.item_list.size.y*0.5)
  panel.item_buttons[1].pressed.emit()
@@ -69,6 +75,9 @@ func run() -> void:
  key(KEY_KP_0);await process_frame
  assert(Session.items.size()==6 and panel.item_buttons.size()==6,"no duplicates and open inventory refresh")
  assert(panel.selected_index==4,"selection retained on refresh")
+ Session.items[4].name="새 설명 확인"
+ panel.refresh()
+ assert(panel.title_label.text=="새 설명 확인","refresh reloads details despite same selection")
  Session.items.append({"id":"existing_owned_item","name":"보존 검사"})
  key(KEY_KP_0)
  assert(Session.items.size()==7 and Session.items[-1].id=="existing_owned_item","existing items retained")

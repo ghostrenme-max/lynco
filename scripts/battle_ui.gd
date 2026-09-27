@@ -4,6 +4,8 @@ const DirectionDiagram = preload("res://scripts/direction_diagram.gd")
 const Directions = preload("res://scripts/direction_preview.gd")
 
 const Symbols = preload("res://scripts/card_symbols.gd")
+const UI = preload("res://scripts/screen_style.gd")
+const Inspector = preload("res://scripts/card_inspector.gd")
 
 const Model = preload("res://scripts/table_battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
@@ -56,7 +58,7 @@ var preview_cost: Label
 var preview_text: Label
 var preview_kind: Label
 var preview_effect: Label
-var inspector_layer: CanvasLayer
+var inspector_layer: Inspector
 var inspector_root: Control
 var inspector_card: Panel
 var inspector_styles: Dictionary = {}
@@ -64,6 +66,7 @@ var inspector_open: bool = false
 var inspector_source_id := ""
 var inspector_reverse := false
 var inspector_front_text: Dictionary = {}
+var inspector_placed := false
 var hover_direction: Control
 var hover_direction_timer: Timer
 var hover_direction_tween: Tween
@@ -163,10 +166,7 @@ func _fit_stage() -> void:
  stage.position = (size - Vector2(1600, 900) * ratio) * 0.5
 
 func _style(bg: Color, radius: int = 10, border: Color = Color.TRANSPARENT, width: int = 0) -> StyleBoxFlat:
- var style := StyleBoxFlat.new()
- style.bg_color = bg; style.set_corner_radius_all(radius); style.corner_detail = 10
- style.border_color = border; style.set_border_width_all(width)
- return style
+ return UI.style(bg,border,width,radius)
 
 func _panel(parent: Node, pos: Vector2, box: Vector2, bg: Color, radius: int = 10, border: Color = Color.TRANSPARENT) -> Panel:
  var panel := Panel.new(); panel.position = pos; panel.size = box
@@ -337,8 +337,9 @@ func _build_ui() -> void:
 
  _build_overlays()
  # Secondary controls live in the help panel, leaving the tabletop HUD clear.
- menu_button.position=Vector2(32,153);menu_button.text="←";menu_button.size=Vector2(43,34)
- menu_button.hide();help_button.hide()
+ menu_button.reparent(help_panel)
+ menu_button.position=Vector2(670,30);menu_button.text="←";menu_button.size=Vector2(48,40)
+ help_button.hide()
  var secondary_controls: Array[Control]=[fill_button,shift_button,draw_button,seed_label,seed_box,reset_button,motion_toggle]
  for control in secondary_controls:
   control.reparent(help_panel)
@@ -520,6 +521,7 @@ func _clear_hand_focus() -> void:
  for view in views.values():view.set_hand_focus(-1,false)
 
 func _inspect(uid: int, populate: bool = false) -> void:
+ if not populate and inspector_open and inspector_placed:return
  var index:=model.find_card(uid)
  if index<0:return
  if bool(model.hand[index].get("concealed", false)): return
@@ -527,6 +529,7 @@ func _inspect(uid: int, populate: bool = false) -> void:
  # Hidden details need only remember the card; populate from live state on open.
  if not populate and not inspector_open:return
  if not populate and inspector_open and inspector_reverse:return
+ inspector_placed=false
  inspector_source_id=str(model.hand[index].id)
  inspector_reverse=false
  var data: Dictionary=Catalog.table_card(model.hand[index].id)
@@ -680,7 +683,7 @@ func _sync_ui() -> void:
   views[uid].locked=busy or model.finished
  if inspect_uid>=0 and model.find_card(inspect_uid)>=0:_inspect(inspect_uid)
  elif not model.hand.is_empty():_inspect(int(model.hand[0].uid))
- elif inspector_open:
+ elif inspector_open and not inspector_placed:
   preview_title.text="손패가 비었습니다";preview_cost.text="—";preview_kind.text="다음 턴에 다시 드로우"
   preview_text.text="턴을 종료해\n새 카드를 뽑으세요.";preview_effect.text=""
 
@@ -899,34 +902,7 @@ func _verify() -> void:
  get_tree().quit()
 
 func _prepare_table_cards() -> void:
- # Bake each definition once; all placed instances share its texture/material.
- var pending:Dictionary={}
- var bake_ids: Array = Catalog.CARDS.keys()
- for front_id in Catalog.CARDS: bake_ids.append("reverse:" + str(front_id))
- for front_id in Catalog.CARDS: bake_ids.append("opponent:" + str(front_id))
- bake_ids.append_array(["back_white","back_black"])
- for id in bake_ids:
-  var canvas:=SubViewport.new();canvas.size=Vector2i(316,456)
-  canvas.transparent_bg=true;canvas.disable_3d=true
-  canvas.render_target_update_mode=SubViewport.UPDATE_ONCE
-  add_child(canvas)
-  var definition:Dictionary=Catalog.back_card(str(id).trim_prefix("reverse:")) if str(id).begins_with("reverse:") else Catalog.table_card(("guard" if id=="back_white" else "strike") if str(id).begins_with("back_") else str(id).trim_prefix("opponent:"))
-  var sample:=Card.new();sample.theme=theme;canvas.add_child(sample)
-  sample.setup({"uid":-1},definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
-  sample.pivot_offset=Vector2.ZERO;sample.scale=Vector2(2,2);sample.locked=true
-  sample.set_face_up(not str(id).begins_with("back_"))
-  sample.outline_style.shadow_size=0
-  if str(id).begins_with("opponent:"):
-   sample.outline_style.bg_color=Color("101211") if bool(definition.dark) else Color("c8cac4")
-  pending[id]=canvas
- await RenderingServer.frame_post_draw
- for id in pending:
-  var canvas:SubViewport=pending[id]
-  var pixels:=canvas.get_texture().get_image()
-  pixels.generate_mipmaps()
-  if str(id).begins_with("back_"):table.set_back_texture(id,ImageTexture.create_from_image(pixels))
-  else:table.set_card_texture(id,ImageTexture.create_from_image(pixels))
-  canvas.queue_free()
+ await preload("res://scripts/card_texture_baker.gd").bake(self,table,theme,textures,dark_ink,light_ink)
  # Warm texture uploads and shader variants before interactive play begins.
 
  var index:int=0
@@ -984,7 +960,12 @@ func _input(event: InputEvent) -> void:
  if not is_instance_valid(table) or not is_instance_valid(stage):return
  if not inspector_open and event is InputEventMouseButton:
   var hud_point: Vector2=stage.get_global_transform_with_canvas().affine_inverse()*event.position
-  if turn_board.get_rect().has_point(hud_point) or (menu_button.visible and menu_button.get_rect().has_point(hud_point)):return
+  if turn_board.get_rect().has_point(hud_point):
+   if event.button_index==MOUSE_BUTTON_LEFT and not event.pressed:
+    var was_dragging: bool=drag_uid>=0
+    _cancel_drag()
+    if was_dragging:get_viewport().set_input_as_handled()
+   return
  if inspector_open:
   if event is InputEventMouseButton:
    if event.pressed and event.button_index==MOUSE_BUTTON_LEFT and inspector_card.get_global_rect().has_point(event.position):
@@ -1199,6 +1180,7 @@ func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
  get_viewport().push_input(release,true)
 
 func _inspect_placed(id: String, reverse: bool = false, card_owner: String = "player") -> void:
+ inspector_placed=true
  inspector_source_id=id
  inspector_reverse=reverse
  inspector_front_text={}
@@ -1262,6 +1244,19 @@ func _verify_look() -> void:
  _test_look_mouse(false)
  await RenderingServer.frame_post_draw
  get_viewport().get_texture().get_image().save_png(output+"/placement_glow.png")
+ # Drag zoom can move the camera during frame capture; project the target again.
+ end=table.screen_position(cell)
+ if turn_board.get_rect().has_point(end):
+  for row in range(Table.ROWS):
+   var found := false
+   for col in range(Table.COLS):
+    var candidate := Vector2i(col,row)
+    var point: Vector2=table.screen_position(candidate)
+    if table.free_cell(candidate) and table.cell_at(point)==candidate and not turn_board.get_rect().has_point(point):
+     cell=candidate;end=point;found=true;break
+   if found:break
+ assert(table.cell_at(end)==cell)
+ assert(not turn_board.get_rect().has_point(end))
  var release:=InputEventMouseButton.new()
  release.button_index=MOUSE_BUTTON_LEFT;release.pressed=false
  release.position=stage.get_global_transform_with_canvas()*end
@@ -1289,110 +1284,36 @@ func _verify_look() -> void:
  print("LYNCO_LOOK_TEST_PASS limits release focus_escape reset rotated_drag drag_exclusion ui_fixed resize glow")
  get_tree().quit()
 func _build_card_inspector() -> void:
- inspector_layer=CanvasLayer.new();inspector_layer.layer=30;add_child(inspector_layer)
- inspector_root=Control.new();inspector_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
- inspector_layer.add_child(inspector_root)
- var copy:=BackBufferCopy.new();copy.copy_mode=BackBufferCopy.COPY_MODE_VIEWPORT
- inspector_root.add_child(copy)
- var backdrop:=ColorRect.new()
- backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
- var blur:=ShaderMaterial.new();blur.shader=preload("res://asset/card_inspector_blur.gdshader")
- backdrop.material=blur;inspector_root.add_child(backdrop)
- inspector_card=_panel(inspector_root,Vector2.ZERO,Vector2(440,620),Color.WHITE,24)
- inspector_styles[false]=_style(Color("fefefb"),24,Color("c5c8c1"),1)
- inspector_styles[true]=_style(Color("181a19"),24,Color("454943"),1)
- preview_cost=_label(inspector_card,"",Vector2(24,24),Vector2(50,58),42)
- preview_title=_label(inspector_card,"",Vector2(87,30),Vector2(188,48),32)
- preview_kind=_label(inspector_card,"",Vector2(87,84),Vector2(322,28),18)
- preview_icon=_icon(inspector_card,"eye",Vector2(130,145),Vector2(180,180))
- preview_text=_label(inspector_card,"",Vector2(30,358),Vector2(380,152),23)
- preview_text.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- preview_text.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- preview_effect=_label(inspector_card,"",Vector2(24,529),Vector2(392,52),19)
- preview_effect.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- preview_effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- inspector_score=preload("res://scripts/table_cost_badge.gd").new()
- inspector_score.position=Vector2(285,28);inspector_score.size=Vector2(132,44)
- inspector_card.add_child(inspector_score)
- var hint:=_label(inspector_card,"우클릭 · Esc · 바깥 클릭으로 닫기",Vector2(20,587),Vector2(400,24),14)
- hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- hint.name="CloseHint"
- inspector_demo=_panel(inspector_root,Vector2.ZERO,Vector2(350,386),Color("202322"),18)
- _label(inspector_demo,"방향 시연",Vector2(24,20),Vector2(302,36),24,Color("f6f6f2"))
- inspector_diagram=DirectionDiagram.new()
- inspector_diagram.position=Vector2(35,70);inspector_diagram.size=Vector2(280,242)
- inspector_demo.add_child(inspector_diagram)
- direction_note=_label(inspector_demo,"",Vector2(22,326),Vector2(306,46),16,Color("c5c8c1"))
- direction_note.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- inspector_comparison=_panel(inspector_root,Vector2.ZERO,Vector2(350,620),Color("161b18"),18)
- for i in range(2):
-  var band:=Panel.new()
-  band.position=Vector2(14,14+i*302);band.size=Vector2(322,290)
-  band.add_theme_stylebox_override("panel",_style(Color("303832"),16,Color.TRANSPARENT,0))
-  band.mouse_filter=Control.MOUSE_FILTER_IGNORE
-  inspector_comparison.add_child(band)
-  comparison_bands.append(band)
-  var heading:=_label(inspector_comparison,"",Vector2(28,32+i*302),Vector2(294,68),22)
-  heading.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-  comparison_titles.append(heading)
-  var effect:=_label(inspector_comparison,"",Vector2(28,110+i*302),Vector2(294,172),21)
-  effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-  comparison_effects.append(effect)
- var separator:=ColorRect.new()
- separator.position=Vector2(28,309);separator.size=Vector2(294,1)
- separator.color=Color("434c46");separator.mouse_filter=Control.MOUSE_FILTER_IGNORE
- inspector_comparison.add_child(separator)
- get_viewport().size_changed.connect(_fit_inspector)
- _fit_inspector();inspector_root.hide()
-
-func _fit_inspector() -> void:
- if not is_instance_valid(inspector_card):return
- var viewport_size:Vector2=get_viewport_rect().size
- var ratio:float=minf(viewport_size.x/1600.0,viewport_size.y/900.0)
- inspector_card.scale=Vector2.ONE*ratio
- inspector_card.position=(viewport_size-inspector_card.size*ratio)*0.5
- inspector_demo.scale=Vector2.ONE*ratio
- inspector_demo.position=viewport_size*0.5+Vector2(260,-193)*ratio
- inspector_comparison.scale=Vector2.ONE*ratio
- inspector_comparison.position=viewport_size*0.5+Vector2(-610,-310)*ratio
+ inspector_layer=Inspector.new()
+ inspector_layer.textures=textures
+ inspector_layer.dark_ink=dark_ink
+ inspector_layer.light_ink=light_ink
+ add_child(inspector_layer)
+ # Keep named view references for input hit testing and existing integration tests.
+ preview_icon=inspector_layer.preview_icon
+ preview_title=inspector_layer.preview_title
+ preview_cost=inspector_layer.preview_cost
+ preview_text=inspector_layer.preview_text
+ preview_kind=inspector_layer.preview_kind
+ preview_effect=inspector_layer.preview_effect
+ inspector_root=inspector_layer.inspector_root
+ inspector_card=inspector_layer.inspector_card
+ inspector_styles=inspector_layer.inspector_styles
+ inspector_demo=inspector_layer.inspector_demo
+ inspector_comparison=inspector_layer.inspector_comparison
+ comparison_bands=inspector_layer.comparison_bands
+ comparison_titles=inspector_layer.comparison_titles
+ comparison_effects=inspector_layer.comparison_effects
+ inspector_diagram=inspector_layer.inspector_diagram
+ direction_note=inspector_layer.direction_note
+ inspector_score=inspector_layer.inspector_score
 
 func _show_inspector(data: Dictionary) -> void:
  if not inspector_reverse:
   inspector_front_text={"title":preview_title.text,"cost":preview_cost.text,"kind":preview_kind.text,"detail":preview_text.text,"effect":preview_effect.text,"tooltip":preview_cost.tooltip_text}
  _stop_look();_clear_hand_focus();press_uid=-1;table.hide_preview()
- var dark:bool=bool(data.dark)
- var ink:Color=Color("f6f6f2") if dark else INK
- var secondary:Color=Color("bfc2ba") if dark else MUTED
- inspector_card.add_theme_stylebox_override("panel",inspector_styles[dark])
- for label in [preview_title,preview_cost,preview_text]:label.add_theme_color_override("font_color",ink)
- for label in [preview_kind,preview_effect,inspector_card.get_node("CloseHint")]:label.add_theme_color_override("font_color",secondary)
- preview_icon.material=Symbols.material_for(data, light_ink if dark else dark_ink)
- inspector_diagram.configure(data,reduced_motion)
- direction_note.text="임시 방향 · 시각적 시연\n전투 효과는 적용하지 않습니다" if not Directions.for_definition(data).is_empty() else "이 카드의 방향은 미정입니다"
- inspector_score.dark=dark
- inspector_score.replay_count(str(data.get("table_cost","—")),reduced_motion)
- var title_font: Font=preview_title.get_theme_font("font")
- var title_width: float=title_font.get_string_size(preview_title.text,HORIZONTAL_ALIGNMENT_LEFT,-1,32).x
- preview_title.add_theme_font_size_override("font_size",mini(32,floori(32.0*188.0/maxf(title_width,1.0))))
- inspector_score.get_child(0).add_theme_color_override("font_color",ink)
- inspector_score.get_child(0).add_theme_font_size_override("font_size",23)
- inspector_score.queue_redraw()
- inspector_open=true;inspector_root.show()
- _refresh_inspector_comparison(data)
-
-func _refresh_inspector_comparison(data: Dictionary) -> void:
- inspector_comparison.visible=str(data.get("identity","normal")) not in ["king","joker"]
- if not inspector_comparison.visible or not Catalog.CARDS.has(inspector_source_id):return
- var definitions: Array[Dictionary]=[Catalog.table_card(inspector_source_id),Catalog.back_card(inspector_source_id)]
- for i in range(2):
-  var active: bool=inspector_reverse==(i==1)
-  comparison_bands[i].self_modulate.a=1.0 if active else 0.08
-  comparison_titles[i].self_modulate.a=1.0 if active else 0.10
-  comparison_effects[i].self_modulate.a=1.0 if active else 0.10
-  comparison_titles[i].text=("앞면" if i==0 else "뒷면")+" · "+str(definitions[i].name)
-  comparison_titles[i].add_theme_color_override("font_color",Color("f5f7f2") if active else Color("6e7a71"))
-  comparison_effects[i].text=Catalog.table_effect_text(inspector_source_id) if i==0 else str(definitions[i].text)
-  comparison_effects[i].add_theme_color_override("font_color",Color("f0f3ec") if active else Color("929d94"))
+ inspector_layer.present(data,inspector_source_id,inspector_reverse,reduced_motion)
+ inspector_open=true
 
 func _toggle_inspector_face() -> void:
  if not Catalog.CARDS.has(inspector_source_id):return
@@ -1491,7 +1412,7 @@ func _verify_inspector() -> void:
  get_tree().quit()
 # Leave only between animations so no suspended combat continuation outlives its scene.
 func _return_to_main() -> void:
- if leaving_battle or busy or inspector_open or looking or drag_uid >= 0 or press_uid >= 0 or help_panel.visible: return
+ if leaving_battle or busy or inspector_open or looking or drag_uid >= 0 or press_uid >= 0: return
  leaving_battle = true
  menu_button.disabled = true
  _close_inspector()
@@ -1651,6 +1572,7 @@ func _set_reduced_motion(value: bool) -> void:
  hover_direction.set_reduced_motion(value)
  inspector_diagram.set_reduced_motion(value)
  table.direction_material.set_shader_parameter("reduced_motion",value)
+ table.far_direction_material.set_shader_parameter("reduced_motion",value)
 
 
 func _toggle_inventory() -> void:
