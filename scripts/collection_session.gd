@@ -5,6 +5,7 @@ const DECKS := {
  "starter": {"name":"린코의 기본 덱","owner":"린코","price":0,"cards":["strike","observe","guard","echo","cycle","link","strike","guard","observe","strike","guard","link","strike","observe","guard","echo","cycle","strike"]},
  "remnant": {"name":"웃는 잔상의 덱","owner":"웃는 잔상","price":60,"cards":["link","observe","guard","cycle","strike","link","observe","guard","echo","link","strike","guard","observe","cycle","link","echo","strike","guard"]},
 }
+static var items: Array[Dictionary] = []
 static var gold: int = 0
 static var unlocked: Array[String] = ["starter"]
 static var selected: String = "starter"

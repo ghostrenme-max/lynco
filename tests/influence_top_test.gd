@@ -42,10 +42,15 @@ func run() -> void:
  check(t.top_view and not ui.stage.visible,"MMB hides HUD in top view")
  check(t.camera.projection==Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(t.camera.rotation.x,-PI/2),"vertical orthographic camera")
  check(not t.get_node("DummyProps").visible and not t.get_node("OpponentTable").visible and not t.get_node("Floor").visible,"table and cards only")
- for y in range(6):
-  for x in range(5):
+ for y in range(5):
+  for x in range(6):
    var cell:=Vector2i(x,y)
    check(t.cell_at(t.screen_position(cell))==cell,"top view hit mapping")
+ await RenderingServer.frame_post_draw
+ var top_image: Image=root.get_texture().get_image()
+ for corner in [Vector2i(1,1),Vector2i(1278,1),Vector2i(1,718),Vector2i(1278,718)]:
+  var color: Color=top_image.get_pixelv(corner)
+  check(maxf(color.r,maxf(color.g,color.b))<0.3,"top corners are black board, never beige")
  await capture("influence_top_1280")
  var fit_size: float=t.camera.size
  button(MOUSE_BUTTON_WHEEL_UP,Vector2(600,300))
@@ -57,7 +62,7 @@ func run() -> void:
  check(t.cell_at(t.screen_position(Vector2i(2,1)))==Vector2i(2,1),"zoomed card hit mapping")
  await capture("influence_top_zoom")
  for i in range(70):button(MOUSE_BUTTON_WHEEL_DOWN,Vector2(600,300))
- check(is_equal_approx(t.top_zoom,1.25),"zoom out bounded")
+ check(is_equal_approx(t.top_zoom,1.0),"zoom out bounded")
  t.top_zoom=1.0;t._fit_top_view()
  button(MOUSE_BUTTON_LEFT,t.camera.unproject_position(t.cell_position(Vector2i(2,1))))
  check(t.selected_cell==t.INVALID,"second click deselects")
@@ -67,7 +72,7 @@ func run() -> void:
  t.select_influence(t.INVALID);t.select_influence(Vector2i(2,1))
  check(Vector2i(2,2) in t.influenced_cells and Vector2i(1,1) in t.influenced_cells,"opponent facing reverses directions")
  root.size=Vector2i(800,720);await process_frame
- check(t.camera.size>20,"narrow aspect fits whole table")
+ check(t.camera.size>16,"narrow aspect fits whole table")
  button(MOUSE_BUTTON_MIDDLE,Vector2(400,300))
  check(not t.top_view and ui.stage.visible and t.camera.transform.is_equal_approx(old_transform),"MMB restores exact camera and HUD")
  root.size=Vector2i(1280,720);await process_frame

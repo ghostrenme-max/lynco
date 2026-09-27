@@ -2,10 +2,10 @@ class_name LyncoTableView
 extends Node3D
 
 # Presentation only: cells never affect combat rules or card ownership.
-const COLS := 5
-const ROWS := 6
+const COLS := 6
+const ROWS := 5
 const INVALID := Vector2i(-1, -1)
-const STEP := Vector2(1.65, 2.35)
+const STEP := Vector2(3.1, 2.35)
 const CARD_METRES := Vector2(1.48, 2.14)
 const CARD_OBJECT = preload("res://scenes/card_3d.tscn")
 var ui_stage: Control
@@ -81,7 +81,7 @@ func set_card_texture(id: String, texture: Texture2D) -> void:
  materials[id]=material
 
 func cell_position(cell: Vector2i) -> Vector3:
- return Vector3((cell.x-2.0)*STEP.x,0.065,(cell.y-2.5)*STEP.y-1.3)
+ return Vector3((cell.x-2.5)*STEP.x,0.065,(cell.y-2.0)*STEP.y-1.3)
 
 func cell_at(local_point: Vector2) -> Vector2i:
  if not ui_stage or opponent_view:return INVALID
@@ -90,7 +90,7 @@ func cell_at(local_point: Vector2) -> Vector2i:
  if not get_viewport().get_visible_rect().has_point(point):return INVALID
  var hit:Variant=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(point),camera.project_ray_normal(point))
  if hit==null:return INVALID
- var cell:=Vector2i(roundi(hit.x/STEP.x+2.0),roundi((hit.z+1.3)/STEP.y+2.5))
+ var cell:=Vector2i(roundi(hit.x/STEP.x+2.5),roundi((hit.z+1.3)/STEP.y+2.0))
  if cell.x<0 or cell.x>=COLS or cell.y<0 or cell.y>=ROWS:return INVALID
  return cell
 
@@ -234,7 +234,7 @@ func _set_card_brightness(cell: Vector2i, highlighted: bool) -> void:
  mirror_cards[cell].get_node("Front").material_override=_far_material(material)
 
 # These are render-only counterparts. Only `cards` represents board occupancy.
-const OPPONENT_TABLE_Z: float = -19.8
+const OPPONENT_TABLE_Z: float = -17.8
 var mirror_cards: Dictionary = {}
 var opponent_fan: Array[Node3D] = []
 var opponent_back_material: StandardMaterial3D
@@ -409,6 +409,8 @@ var top_view := false
 var top_zoom := 1.0
 var top_saved_transform: Transform3D
 var top_saved_projection: Camera3D.ProjectionType
+var top_saved_table_scale: Vector3
+var top_saved_table_material: Material
 var top_saved_size: float
 var top_hidden: Dictionary = {}
 
@@ -455,7 +457,14 @@ func set_top_view(enabled: bool) -> void:
   top_saved_projection=camera.projection
   top_saved_size=camera.size
   camera.projection=Camera3D.PROJECTION_ORTHOGONAL
-  camera.position=Vector3(0,25,0)
+  camera.position=Vector3(0,25,-1.3)
+  top_saved_table_scale=$Table/Tabletop.scale
+  top_saved_table_material=$Table/Tabletop.material_override
+  $Table/Tabletop.scale=Vector3(10,1,10)
+  var black_board:=StandardMaterial3D.new()
+  black_board.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+  black_board.albedo_color=Color("202324")
+  $Table/Tabletop.material_override=black_board
   camera.rotation=Vector3(-PI*0.5,0,0)
   for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$BetweenTablesShade,$GarnetCubes,$Distributors]:
    top_hidden[node]=node.visible
@@ -467,6 +476,8 @@ func set_top_view(enabled: bool) -> void:
    top_hidden[holder]=holder.visible
    holder.hide()
  else:
+  $Table/Tabletop.scale=top_saved_table_scale
+  $Table/Tabletop.material_override=top_saved_table_material
   camera.transform=top_saved_transform
   camera.projection=top_saved_projection
   camera.size=top_saved_size
@@ -484,12 +495,29 @@ func set_top_view(enabled: bool) -> void:
 func _fit_top_view() -> void:
  if not top_view:return
  var viewport_size: Vector2=get_viewport().get_visible_rect().size
- camera.size=maxf(18.4,23.5*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
-func zoom_top_view(steps: float) -> void:
+ camera.size=maxf(STEP.y*ROWS+0.1,(STEP.x*COLS+0.1)*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
+ _clamp_top_camera()
+func zoom_top_view(steps: float, pointer: Vector2 = Vector2(-1,-1)) -> void:
  if not top_view:return
- top_zoom=clampf(top_zoom*pow(0.88,steps),0.35,1.25)
+ var before: Variant=null
+ if pointer.x>=0:
+  before=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(pointer),camera.project_ray_normal(pointer))
+ top_zoom=clampf(top_zoom*pow(0.88,steps),0.35,1.0)
  _fit_top_view()
+ if before!=null:
+  var after: Variant=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(pointer),camera.project_ray_normal(pointer))
+  if after!=null:camera.position+=before-after
+ _clamp_top_camera()
 
+func _clamp_top_camera() -> void:
+ if not top_view:return
+ var viewport_size: Vector2=get_viewport().get_visible_rect().size
+ var half_height: float=camera.size*0.5
+ var half_width: float=half_height*viewport_size.x/maxf(viewport_size.y,1.0)
+ var limit_x: float=maxf(0.0,STEP.x*COLS*0.5-half_width)
+ var limit_z: float=maxf(0.0,STEP.y*ROWS*0.5-half_height)
+ camera.position.x=clampf(camera.position.x,-limit_x,limit_x)
+ camera.position.z=clampf(camera.position.z,-1.3-limit_z,-1.3+limit_z)
 func _show_influence_links() -> void:
  if influenced_cells.is_empty():return
  if influence_links.is_empty():
@@ -515,6 +543,8 @@ func _show_influence_links() -> void:
    var link: MeshInstance3D=influence_links[i*2+side]
    link.position=(start+finish)*0.5+Vector3(0,0.085,0)
    link.rotation.y=atan2(-direction.x,-direction.z)
+   var card_extent: float=CARD_METRES.x if absf(direction.x)>0.5 else CARD_METRES.y
+   link.scale.z=(start.distance_to(finish)-card_extent+0.30)/0.52
    link.visible=not mirrored or not top_view
 
 func _setup_garnet_cubes() -> void:

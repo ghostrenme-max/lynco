@@ -30,10 +30,10 @@ func run() -> void:
   check(particles.color_ramp.sample(1.0).a==0.0,"particles disappear at end of short travel")
  check(ui.turn_track.occupied==ui.model.placed.size(),"progress from model")
  check(not ui.menu_button.visible,"top left arrow removed")
- check(ui.table.COLS==5 and ui.table.ROWS==6 and ui.Model.CAPACITY==30,"5 by 6 playable board")
+ check(ui.table.COLS==6 and ui.table.ROWS==5 and ui.Model.CAPACITY==30,"6 by 5 wide playable board")
  check(not ui.table.black_market_open and not ui.table.get_node("Distributors/BlackMarket/ActiveLight").visible,"black market idle")
- for y in range(6):
-  for x in range(5):
+ for y in range(5):
+  for x in range(6):
    var cell:=Vector2i(x,y)
    check(ui.table.cell_at(ui.table.screen_position(cell))==cell,"all thirty cells hit")
  await capture("hud_layout_1280")

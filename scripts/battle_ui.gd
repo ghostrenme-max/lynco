@@ -208,10 +208,7 @@ var turn_board: Panel
 var turn_track: Control
 var turn_caption: Label
 var camera_keys: Dictionary = {}
-var saved_window_mode: Window.Mode = Window.MODE_WINDOWED
-var saved_window_size := Vector2i.ZERO
-var saved_window_position := Vector2i.ZERO
-
+var inventory_layer: CanvasLayer
 func _build_ui() -> void:
  turn_board=_panel(stage,Vector2(600,20),Vector2(970,156),Color("171a18"),20)
  turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
@@ -665,6 +662,7 @@ func _check_end() -> void:
  _sync_ui()
 
 func _unhandled_key_input(event: InputEvent) -> void:
+ if is_instance_valid(inventory_layer):return
  if not event is InputEventKey or not event.pressed or event.echo:return
  if event.keycode==KEY_F1:
   help_panel.visible=not help_panel.visible
@@ -896,10 +894,13 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
- if event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode==KEY_L or event.keycode==KEY_L):
-  _toggle_fullscreen()
-  get_viewport().set_input_as_handled()
-  return
+ if get_node("/root/WindowControls").handle_shortcut(event):return
+ if event is InputEventKey and event.pressed and not event.echo:
+  if event.physical_keycode==KEY_F or event.keycode==KEY_F:
+   _toggle_inventory();get_viewport().set_input_as_handled();return
+  if is_instance_valid(inventory_layer) and event.keycode==KEY_ESCAPE:
+   _toggle_inventory();get_viewport().set_input_as_handled();return
+ if is_instance_valid(inventory_layer):return
  if is_instance_valid(table) and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE and event.pressed:
   if not busy and not inspector_open and drag_uid<0 and press_uid<0 and not help_panel.visible:
    _stop_look();_hide_hover_direction();camera_keys.clear()
@@ -911,7 +912,7 @@ func _input(event: InputEvent) -> void:
   if event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE,KEY_R]:
    table.set_top_view(false);stage.show()
   elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
-   table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0))
+   table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0),event.position)
   elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
    table.select_influence(table.cell_at(stage.get_global_transform_with_canvas().affine_inverse()*event.position))
   get_viewport().set_input_as_handled()
@@ -1474,15 +1475,15 @@ func _set_reduced_motion(value: bool) -> void:
  inspector_diagram.set_reduced_motion(value)
  table.direction_material.set_shader_parameter("reduced_motion",value)
 
-func _toggle_fullscreen() -> void:
- var window:=get_window()
- if window.mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN]:
-  window.mode=saved_window_mode
-  if saved_window_mode==Window.MODE_WINDOWED and saved_window_size!=Vector2i.ZERO:
-   window.size=saved_window_size
-   window.position=saved_window_position
- else:
-  saved_window_mode=window.mode
-  saved_window_size=window.size
-  saved_window_position=window.position
-  window.mode=Window.MODE_FULLSCREEN
+
+func _toggle_inventory() -> void:
+ if is_instance_valid(inventory_layer):
+  inventory_layer.queue_free();inventory_layer=null
+  return
+ _stop_look();_cancel_drag();_hide_hover_direction();camera_keys.clear()
+ _close_inspector();help_panel.hide()
+ inventory_layer=CanvasLayer.new();inventory_layer.layer=50
+ add_child(inventory_layer)
+ var inventory:=preload("res://scripts/inventory_panel.gd").new()
+ inventory.theme=theme
+ inventory_layer.add_child(inventory)

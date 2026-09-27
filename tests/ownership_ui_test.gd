@@ -39,7 +39,7 @@ func run() -> void:
  check(enemy_cell!=table.INVALID and own_cell!=table.INVALID,"both owners present")
  check(table.get_node("Table/Tabletop").mesh.surface_get_material(0).albedo_color.a==1.0,"near table opaque")
  check(is_equal_approx(table.get_node("OpponentTable/Tabletop").material_override.albedo_color.a,0.84),"far table translucent")
- check(is_equal_approx(table.get_node("BetweenTablesShade").position.z,-9.9),"soft shade centered in gap")
+ check(is_equal_approx(table.get_node("BetweenTablesShade").position.z,-8.9),"soft shade centered in gap")
  for cell in table.mirror_cards:
   check(is_equal_approx(table.mirror_cards[cell].get_node("Front").material_override.albedo_color.a,0.84),"far cards translucent")
   check(table.cards[cell].get_node("Front").material_override.albedo_color.a==1.0,"near cards remain opaque")
@@ -115,7 +115,7 @@ func run() -> void:
  check(holder.get_node("ContactShadow").visible and holder.get_node("OwnerMark").visible,"contact feedback at stop")
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(child.visible,"directions appear after landing")
- var empty:=Vector2i(4,5)
+ var empty:=Vector2i(5,4)
  table.place("guard",empty,false)
  check(table.mirror_cards[empty].position.is_equal_approx(table.mirror_position(empty)),"mirror copy appears immediately")
  check(table.animations.size()==1,"only own local landing is animated")

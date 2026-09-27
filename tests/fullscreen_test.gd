@@ -6,6 +6,15 @@ func press_l() -> void:
   event.keycode=KEY_L;event.physical_keycode=KEY_L;event.pressed=pressed
   root.push_input(event,true)
 func run() -> void:
+ for scene in ["main_menu","card_book","shop"]:
+  var path: String="res://scenes/"+scene+".tscn"
+  if not ResourceLoader.exists(path):continue
+  change_scene_to_file(path);await scene_changed
+  press_l();await create_timer(0.15).timeout
+  assert(root.mode==Window.MODE_FULLSCREEN,"fullscreen in "+scene)
+  press_l();await create_timer(0.15).timeout
+  assert(root.mode==Window.MODE_WINDOWED,"restore in "+scene)
+  print("GLOBAL_FULLSCREEN_SCENE_PASS ",scene)
  change_scene_to_file("res://scenes/battle.tscn");await scene_changed
  var ui=current_scene.get_node("Interface")
  while ui.busy or ui.views.is_empty():await process_frame

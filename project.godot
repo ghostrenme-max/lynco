@@ -16,6 +16,10 @@ run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icons/enemy.png"
 
+[autoload]
+
+WindowControls="*res://scripts/window_controls.gd"
+
 [display]
 
 window/size/viewport_width=1600

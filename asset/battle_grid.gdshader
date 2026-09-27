@@ -2,10 +2,10 @@ shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never;
 uniform int opponent_mask = 0;
 void fragment() {
- vec2 grid = UV * vec2(5.0,6.0);
- ivec2 cell = clamp(ivec2(floor(grid)),ivec2(0),ivec2(4,5));
- bool enemy = (opponent_mask & (1 << (cell.y*5+cell.x))) != 0;
- vec2 edge = min(fract(grid),1.0-fract(grid))*vec2(1.65,2.35);
+ vec2 grid = UV * vec2(6.0,5.0);
+ ivec2 cell = clamp(ivec2(floor(grid)),ivec2(0),ivec2(5,4));
+ bool enemy = (opponent_mask & (1 << (cell.y*6+cell.x))) != 0;
+ vec2 edge = min(fract(grid),1.0-fract(grid))*vec2(3.1,2.35);
  float distance_to_line = min(edge.x,edge.y);
  float line = 1.0-smoothstep(0.007,0.018,distance_to_line);
  float halo = exp(-distance_to_line*24.0);
