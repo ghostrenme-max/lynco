@@ -53,14 +53,15 @@ func _ready() -> void:
  hint_material.shader=preload("res://asset/card_placement.gdshader")
  hint=MeshInstance3D.new();hint.mesh=card_mesh;hint.material_override=hint_material
  world.add_child(hint);hint.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF;hint.hide()
- direction_mesh=PlaneMesh.new();direction_mesh.size=Vector2(0.28,0.34)
+ direction_mesh=PlaneMesh.new();direction_mesh.size=Vector2(0.22,0.22)
  direction_material=ShaderMaterial.new()
- direction_material.shader=preload("res://asset/card_direction.gdshader")
+ direction_material.shader=preload("res://asset/card_direction_tab.gdshader")
  owner_line_mesh=PlaneMesh.new();owner_line_mesh.size=Vector2(0.74,0.035)
  owner_dash_mesh=PlaneMesh.new();owner_dash_mesh.size=Vector2(0.13,0.035)
  owner_line_material=StandardMaterial3D.new()
  owner_line_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
  owner_line_material.albedo_color=Color("dddeda")
+ get_viewport().size_changed.connect(_fit_top_view)
  _setup_atmosphere()
  set_process(false)
 
@@ -78,7 +79,7 @@ func cell_position(cell: Vector2i) -> Vector3:
 
 func cell_at(local_point: Vector2) -> Vector2i:
  if not ui_stage or opponent_view:return INVALID
- if not Rect2(310,30,940,565).has_point(local_point):return INVALID
+ if not top_view and not Rect2(310,30,940,565).has_point(local_point):return INVALID
  var point:Vector2=ui_stage.get_global_transform_with_canvas()*local_point
  if not get_viewport().get_visible_rect().has_point(point):return INVALID
  var hit:Variant=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(point),camera.project_ray_normal(point))
@@ -128,6 +129,7 @@ func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = fals
  far.position=mirror_position(cell);far.rotation=Vector3(0,PI,0)
 
 func clear_cards() -> void:
+ select_influence(INVALID)
  set_hover_card(INVALID)
  for tween in animations:
   if tween.is_valid():tween.kill()
@@ -147,12 +149,13 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
  back_materials[id]=material
 
 func look_by(relative: Vector2) -> void:
- if opponent_view:return
+ if opponent_view or top_view:return
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
 
 func reset_look() -> void:
+ if top_view:set_top_view(false)
  if camera_transition and camera_transition.is_valid():camera_transition.kill()
  opponent_view=false
  look_offset=Vector2.ZERO
@@ -168,12 +171,12 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
   arrow.mesh=direction_mesh
   arrow.material_override=direction_material
   arrow.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-  arrow.position=Vector3(offset.x*0.60,0.038,offset.y*0.95)
+  arrow.position=Vector3(offset.x*0.79,0.038,offset.y*1.13)
   arrow.rotation.y=-offset.angle()-PI*0.5
   holder.add_child(arrow)
 
 func pan_by(direction: Vector2, delta: float) -> void:
- if opponent_view:return
+ if opponent_view or top_view:return
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
@@ -245,6 +248,7 @@ func _make_card(id: String, reverse: bool, quick: bool) -> Node3D:
  holder.get_node("Front").material_override=materials["reverse:"+id if reverse else id]
  holder.get_node("Back").material_override=back_materials["back_black" if bool(data.dark) else "back_white"]
  _add_direction_arrows(holder,data,quick)
+ _add_influence_overlay(holder)
  return holder
 
 func _track(tween: Tween) -> void:
@@ -309,6 +313,8 @@ func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int
  show_opponent_hand(hand_after)
 
 func set_opponent_view(enabled: bool, quick: bool = false) -> void:
+ if top_view:set_top_view(false)
+ select_influence(INVALID)
  if enabled==opponent_view:return
  if camera_transition and camera_transition.is_valid():camera_transition.kill()
  if enabled:
@@ -378,3 +384,121 @@ func _setup_atmosphere() -> void:
  gap.position=Vector3(0,-0.16,OPPONENT_TABLE_Z*0.5)
  gap.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
  add_child(gap)
+
+# Visual adjacency preview only; it never applies card effects.
+var selected_cell := INVALID
+var influenced_cells: Array[Vector2i] = []
+var influence_dim: ShaderMaterial
+var influence_glow: ShaderMaterial
+var influence_mesh: PlaneMesh
+var influence_links: Array[MeshInstance3D] = []
+var top_view := false
+var top_zoom := 1.0
+var top_saved_transform: Transform3D
+var top_saved_projection: Camera3D.ProjectionType
+var top_saved_size: float
+var top_hidden: Dictionary = {}
+
+func _add_influence_overlay(holder: Node3D) -> void:
+ if influence_mesh==null:
+  influence_mesh=PlaneMesh.new()
+  influence_mesh.size=Vector2(1.92,2.58)
+  influence_dim=ShaderMaterial.new()
+  influence_dim.shader=preload("res://asset/card_influence.gdshader")
+  influence_glow=influence_dim.duplicate()
+  influence_glow.set_shader_parameter("glowing",true)
+ var overlay:=MeshInstance3D.new()
+ overlay.name="InfluenceOverlay"
+ overlay.mesh=influence_mesh
+ overlay.position.y=0.055
+ overlay.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ overlay.hide()
+ holder.add_child(overlay)
+
+func select_influence(cell: Vector2i) -> void:
+ for link in influence_links:link.hide()
+ selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
+ influenced_cells.clear()
+ if cards.has(selected_cell):
+  var source: Node3D=cards[selected_cell]
+  var id: String=str(source.get_meta("card_id"))
+  var definition: Dictionary=Catalog.back_card(id) if bool(source.get_meta("reverse",false)) else Catalog.card(id)
+  var facing: int=-1 if str(source.get_meta("owner","player"))=="opponent" else 1
+  for direction in Directions.for_definition(definition):
+   var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])*facing
+   if cards.has(target):influenced_cells.append(target)
+ for placed_cell in cards:
+  for holder in [cards[placed_cell],mirror_cards[placed_cell]]:
+   var overlay: MeshInstance3D=holder.get_node("InfluenceOverlay")
+   overlay.visible=selected_cell!=INVALID and placed_cell!=selected_cell
+   overlay.material_override=influence_glow if placed_cell in influenced_cells else influence_dim
+ _show_influence_links()
+
+func set_top_view(enabled: bool) -> void:
+ if top_view==enabled:return
+ if enabled:
+  top_zoom=1.0
+  top_saved_transform=camera.transform
+  top_saved_projection=camera.projection
+  top_saved_size=camera.size
+  camera.projection=Camera3D.PROJECTION_ORTHOGONAL
+  camera.position=Vector3(0,25,0)
+  camera.rotation=Vector3(-PI*0.5,0,0)
+  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$BetweenTablesShade]:
+   top_hidden[node]=node.visible
+   node.hide()
+  for link in influence_links:
+   if bool(link.get_meta("mirror",false)):
+    top_hidden[link]=link.visible;link.hide()
+  for holder in mirror_cards.values():
+   top_hidden[holder]=holder.visible
+   holder.hide()
+ else:
+  camera.transform=top_saved_transform
+  camera.projection=top_saved_projection
+  camera.size=top_saved_size
+  for node in top_hidden:
+   if is_instance_valid(node):node.visible=top_hidden[node]
+  top_hidden.clear()
+ top_view=enabled
+ hide_preview()
+ if enabled:_fit_top_view()
+ else:
+  for link in influence_links:link.hide()
+  _show_influence_links()
+
+func _fit_top_view() -> void:
+ if not top_view:return
+ var viewport_size: Vector2=get_viewport().get_visible_rect().size
+ camera.size=maxf(12.4,23.5*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
+func zoom_top_view(steps: float) -> void:
+ if not top_view:return
+ top_zoom=clampf(top_zoom*pow(0.88,steps),0.35,1.25)
+ _fit_top_view()
+
+func _show_influence_links() -> void:
+ if influenced_cells.is_empty():return
+ if influence_links.is_empty():
+  var material:=ShaderMaterial.new()
+  material.shader=preload("res://asset/card_connection.gdshader")
+  var mesh:=PlaneMesh.new()
+  mesh.size=Vector2(0.20,0.52)
+  for i in range(8):
+   var link:=MeshInstance3D.new()
+   link.name="InfluenceLink"+str(i)
+   link.mesh=mesh;link.material_override=material
+   link.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+   link.set_meta("mirror",i%2==1)
+   world.add_child(link);link.hide()
+   influence_links.append(link)
+ for i in range(influenced_cells.size()):
+  var target: Vector2i=influenced_cells[i]
+  for side in range(2):
+   var mirrored: bool=side==1
+   var start: Vector3=mirror_position(selected_cell) if mirrored else cell_position(selected_cell)
+   var finish: Vector3=mirror_position(target) if mirrored else cell_position(target)
+   var direction: Vector3=(finish-start).normalized()
+   var link: MeshInstance3D=influence_links[i*2+side]
+   link.position=(start+finish)*0.5+Vector3(0,0.085,0)
+   link.rotation.y=atan2(-direction.x,-direction.z)
+   link.visible=not mirrored or not top_view

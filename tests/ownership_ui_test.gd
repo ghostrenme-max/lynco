@@ -67,7 +67,14 @@ func run() -> void:
  await capture("hover_1280")
  ui._test_pointer(Vector2(350,105));await create_timer(0.1).timeout
  check(table.cards[enemy_cell].get_node("Front").material_override==dim,"leave restores dim")
- ui._test_pointer(table.screen_position(enemy_cell),true);await process_frame
+ var detail_point: Vector2=ui.stage.get_global_transform_with_canvas()*table.screen_position(enemy_cell)
+ var detail_event:=InputEventMouseButton.new()
+ detail_event.button_index=MOUSE_BUTTON_RIGHT;detail_event.pressed=true;detail_event.position=detail_point
+ root.push_input(detail_event,true)
+ detail_event=InputEventMouseButton.new()
+ detail_event.button_index=MOUSE_BUTTON_RIGHT;detail_event.position=detail_point
+ root.push_input(detail_event,true)
+ await process_frame
  check(ui.inspector_open and ui.preview_kind.text.begins_with("상대 카드"),"owner in inspector")
  check(is_zero_approx(ui.inspector_card.rotation),"inspector readable upright")
  await capture("inspector_1280")

@@ -244,7 +244,7 @@ func _build_ui() -> void:
  _label(stage,"손패를 버리고 상대 배치 · 테이블 유지",Vector2(1260,617),Vector2(306,23),13,MUTED)
 
  hand_label = _label(stage,"HAND  0 / 7",Vector2(354,612),Vector2(220,24),13,MUTED)
- _label(stage,"WASD · 이동 / 우클릭 · 둘러보기 / R · 중앙",Vector2(580,20),Vector2(490,26),13,MUTED)
+ _label(stage,"WASD · 이동 / 휠 클릭 · 탑뷰 / R · 중앙",Vector2(580,20),Vector2(490,26),13,MUTED)
  hand_hint = _label(stage,"우클릭 상세 · 드래그 배치",Vector2(805,612),Vector2(410,24),13,MUTED)
  hand_hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
  hand_layer = Control.new(); hand_layer.size=Vector2(1600,900); hand_layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -314,14 +314,14 @@ func _build_overlays() -> void:
  help_panel=_panel(stage,Vector2(420,210),Vector2(760,430),Color("fafbf6"),16,Color("c8cfbd"))
  help_panel.z_index=110; help_panel.mouse_filter=Control.MOUSE_FILTER_STOP
  _label(help_panel,"플레이 안내",Vector2(32,27),Vector2(640,47),28)
- _label(help_panel,"카드 클릭 / 숫자 1–7    선택 · 손패 우클릭    상세\n더블클릭 / Enter / 드래그    카드 사용\nE    손패 5장 보충 / Shift    가림 셔플\n가린 카드 클릭    정체 공개 (효과·비용 미정)\nWASD    이동 / 우클릭 드래그    둘러보기 / R    중앙\nSpace    턴 종료 / Esc    선택 해제 · 안내 닫기\nF3    FPS · 프레임 · 드로우 콜 표시\n같은 시드는 같은 카드 순서를 재현합니다.\n드로우 시연과 현재 수치는 테스트용입니다.",Vector2(33,93),Vector2(694,265),19)
+ _label(help_panel,"손패 클릭 / 숫자 1–7    선택 · 우클릭    상세\n더블클릭 / Enter / 드래그    카드 사용\nE    손패 5장 보충 / Shift    가림 셔플\n가린 카드 클릭    정체 공개 (효과·비용 미정)\nWASD    이동 / 우클릭 드래그    둘러보기 / R    중앙\nSpace    턴 종료 / Esc    선택 해제 · 안내 닫기\nF3    FPS · 프레임 · 드로우 콜 표시\n테이블 카드 클릭    영향 대상 표시 / 우클릭    상세\n휠 클릭    탑뷰 전환 · 복귀 / 탑뷰 휠    확대·축소",Vector2(33,93),Vector2(694,265),19)
  var close := _button(help_panel,"닫기",Vector2(579,362),Vector2(148,42),true)
  close.pressed.connect(func():help_panel.hide())
  help_panel.hide()
 
 func _restart(new_seed: int) -> void:
  if busy and not views.is_empty(): return
- _close_inspector();_stop_look();table.reset_look()
+ _close_inspector();_stop_look();table.reset_look();stage.show()
  table.clear_cards();press_uid=-1;drag_uid=-1
  busy=true; selected_uid=-1; inspect_uid=-1; hovered_uid=-1
  result_panel.hide(); help_panel.hide()
@@ -478,6 +478,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  if not reason.is_empty():_toast(reason);return
  if cell==Table.INVALID:cell=table.next_cell()
  if not table.free_cell(cell):_toast("빈 테이블 칸에 놓아주세요");return
+ table.select_influence(Table.INVALID)
  busy=true
  _clear_hand_focus()
  selected_uid=-1
@@ -621,6 +622,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
   else:performance_timer.stop();performance_label.text="F3 · 성능 표시"
   get_viewport().set_input_as_handled();return
  if event.keycode==KEY_ESCAPE:
+  table.select_influence(Table.INVALID)
   _close_inspector()
   _stop_look()
   _cancel_drag()
@@ -839,6 +841,22 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ if is_instance_valid(table) and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE and event.pressed:
+  if not busy and not inspector_open and drag_uid<0 and press_uid<0 and not help_panel.visible:
+   _stop_look();_hide_hover_direction();camera_keys.clear()
+   table.set_top_view(not table.top_view)
+   stage.visible=not table.top_view
+   get_viewport().set_input_as_handled()
+  return
+ if is_instance_valid(table) and table.top_view:
+  if event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE,KEY_R]:
+   table.set_top_view(false);stage.show()
+  elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+   table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0))
+  elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
+   table.select_influence(table.cell_at(stage.get_global_transform_with_canvas().affine_inverse()*event.position))
+  get_viewport().set_input_as_handled()
+  return
  if event is InputEventKey:
   var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
   if key in [KEY_W,KEY_A,KEY_S,KEY_D] and not event.pressed:
@@ -872,6 +890,11 @@ func _input(event: InputEvent) -> void:
    _inspect(hand_uid,true)
    _show_inspector(Catalog.table_card(model.hand[model.find_card(hand_uid)].id))
    get_viewport().set_input_as_handled();return
+  var placed_cell: Vector2i=table.cell_at(point)
+  if table.cards.has(placed_cell):
+   var holder: Node3D=table.cards[placed_cell]
+   _inspect_placed(str(holder.get_meta("card_id")),bool(holder.get_meta("reverse",false)),str(holder.get_meta("owner","player")))
+   get_viewport().set_input_as_handled();return
   if not Rect2(310,30,940,565).has_point(point):return
   looking=true;look_pointer=get_viewport().get_mouse_position()
   previous_mouse_mode=Input.mouse_mode
@@ -892,8 +915,9 @@ func _input(event: InputEvent) -> void:
    press_uid=_hand_card_at(press_point)
    if press_uid<0:
     var cell:Vector2i=table.cell_at(press_point)
-    if table.cards.has(cell):
-     _inspect_placed(str(table.cards[cell].get_meta("card_id")),bool(table.cards[cell].get_meta("reverse",false)),str(table.cards[cell].get_meta("owner","player")))
+    if cell!=Table.INVALID:
+     _hide_hover_direction()
+     table.select_influence(cell)
      get_viewport().set_input_as_handled()
   else:
    press_uid=-1
