@@ -87,6 +87,8 @@ func run() -> void:
  var finish: Vector3=holder.position
  var start: Vector3=finish+Vector3(2,3,-5)
  var slide: Tween=table._slide_opponent(holder,start,finish,false)
+ for child in holder.get_children():
+  if str(child.name).begins_with("Direction_"):check(not child.visible,"directions hidden while opponent card flies")
  var samples:=0
  while slide.is_running():
   check((holder.position-start).cross(finish-start).length()<0.0001,"strict straight path")
@@ -95,6 +97,8 @@ func run() -> void:
   await process_frame
  check(samples>3 and holder.position.is_equal_approx(finish),"fast insertion reaches target")
  check(holder.get_node("ContactShadow").visible and holder.get_node("OwnerMark").visible,"contact feedback at stop")
+ for child in holder.get_children():
+  if str(child.name).begins_with("Direction_"):check(child.visible,"directions appear after landing")
  var empty:=Vector2i(5,2)
  table.place("guard",empty,false)
  check(table.mirror_cards[empty].position.is_equal_approx(table.mirror_position(empty)),"mirror copy appears immediately")

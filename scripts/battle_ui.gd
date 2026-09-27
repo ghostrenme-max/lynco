@@ -203,10 +203,32 @@ func _icon(parent: Node, key: String, pos: Vector2, box: Vector2, white: bool = 
 
 var inspector_score: Control
 var table_status: Label
+var garnet_label: Label
+var turn_board: Panel
+var turn_track: Control
+var turn_caption: Label
 var camera_keys: Dictionary = {}
 
 func _build_ui() -> void:
- table_status = _label(stage,"",Vector2(1120,32),Vector2(455,145),21,Color.WHITE)
+ turn_board=_panel(stage,Vector2(600,20),Vector2(970,156),Color("171a18"),20)
+ turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
+ turn_caption=_label(turn_board,"",Vector2(28,14),Vector2(710,32),22,Color("eeeee5"))
+ table_status=_label(turn_board,"",Vector2(28,114),Vector2(700,25),16,Color("c4c7bd"))
+ turn_track=preload("res://scripts/turn_track.gd").new()
+ turn_track.position=Vector2(26,52);turn_track.size=Vector2(714,52)
+ turn_track.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ turn_board.add_child(turn_track)
+ var garnet_icon:=Polygon2D.new()
+ garnet_icon.position=Vector2(53,47)
+ var hex_points:=PackedVector2Array()
+ for i in range(6):
+  var angle: float=float(i)*TAU/6.0-PI*0.5
+  hex_points.append(Vector2(cos(angle),sin(angle))*22)
+ garnet_icon.polygon=hex_points
+ garnet_icon.color=Color("303733");stage.add_child(garnet_icon)
+ garnet_label=_label(stage,"0",Vector2(89,25),Vector2(180,45),30,Color("252c28"))
+ garnet_label.tooltip_text="큐브 가넷 · 현재 보유 재화"
+ _panel(stage,Vector2(37,91),Vector2(29,42),Color("303733"),3)
  _build_card_inspector()
  hover_direction = DirectionDiagram.new()
  hover_direction.size = Vector2(176,152)
@@ -239,12 +261,16 @@ func _build_ui() -> void:
  menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
  menu_button.pressed.connect(_return_to_main)
 
- end_button = _button(stage,"턴 종료    →",Vector2(1260,552),Vector2(306,53),true)
+ end_button = _button(turn_board,"턴 종료 →",Vector2(767,87),Vector2(178,47),true)
  end_button.pressed.connect(_end_turn)
- _label(stage,"손패를 버리고 상대 배치 · 테이블 유지",Vector2(1260,617),Vector2(306,23),13,MUTED)
 
- hand_label = _label(stage,"HAND  0 / 7",Vector2(354,612),Vector2(220,24),13,MUTED)
- _label(stage,"WASD · 이동 / 휠 클릭 · 탑뷰 / R · 중앙",Vector2(580,20),Vector2(490,26),13,MUTED)
+
+ hand_label = _label(stage,"0 / 0",Vector2(89,88),Vector2(210,45),28,Color("252c28"))
+ hand_label.tooltip_text="현재 손패 / 전체 내 카드 수"
+ for count_label in [garnet_label,hand_label]:
+  count_label.add_theme_color_override("font_color",Color("252c28"))
+  count_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
+
  hand_hint = _label(stage,"우클릭 상세 · 드래그 배치",Vector2(805,612),Vector2(410,24),13,MUTED)
  hand_hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
  hand_layer = Control.new(); hand_layer.size=Vector2(1600,900); hand_layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
@@ -259,7 +285,7 @@ func _build_ui() -> void:
  draw_button = _button(stage,"드로우 시연",Vector2(199,777),Vector2(128,38))
  draw_button.tooltip_text="전투 규칙 외 시연 기능 · 덱에서 카드 1장을 뽑습니다."
  draw_button.pressed.connect(_demo_draw)
- _label(stage,"테스트 기능",Vector2(207,822),Vector2(120,20),11,MUTED)
+
  toast_label = _label(stage,"",Vector2(345,110),Vector2(330,65),16)
  toast_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  toast_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
@@ -284,8 +310,26 @@ func _build_ui() -> void:
  motion_toggle.toggled.connect(_set_reduced_motion)
  stage.add_child(motion_toggle)
  performance_label=_label(stage,"F3 · 성능 표시",Vector2(34,873),Vector2(900,20),11,MUTED)
- _label(stage,"UI / DRAW · 임시 전투 규칙",Vector2(1260,873),Vector2(310,20),11,MUTED)
+
  _build_overlays()
+ # Secondary controls live in the help panel, leaving the tabletop HUD clear.
+ menu_button.position=Vector2(32,153);menu_button.text="←";menu_button.size=Vector2(43,34)
+ help_button.position=Vector2(87,153)
+ var secondary_controls: Array[Control]=[fill_button,shift_button,draw_button,seed_label,seed_box,reset_button,motion_toggle]
+ for control in secondary_controls:
+  control.reparent(help_panel)
+ fill_button.position=Vector2(28,356);fill_button.size=Vector2(165,36)
+ shift_button.position=Vector2(208,356);shift_button.size=Vector2(216,36)
+ draw_button.position=Vector2(439,356)
+ seed_label.position=Vector2(28,414)
+ seed_box.position=Vector2(88,408)
+ reset_button.position=Vector2(241,408)
+ motion_toggle.position=Vector2(320,407)
+ motion_toggle.add_theme_color_override("font_color",INK)
+ seed_label.add_theme_color_override("font_color",INK)
+ help_panel.size.y=482
+ for label in [hand_hint,deck_label,discard_label,exhaust_label,performance_label]:label.hide()
+ toast_label.position=Vector2(325,185);toast_label.size=Vector2(650,45)
  performance_timer=Timer.new(); performance_timer.wait_time=0.5
  performance_timer.timeout.connect(_update_performance); add_child(performance_timer)
 
@@ -566,12 +610,15 @@ func _demo_draw() -> void:
 
 func _sync_ui() -> void:
  if is_instance_valid(table_status):
-  table_status.text = "행동력 %d / 3 · %s\n테이블  나 %d : %d 상대\n배치 %d / 18 · 골드 %d" % [model.energy,"상대·연출 중" if busy else "내 차례",model.player_score,model.opponent_score,model.placed.size(),preload("res://scripts/collection_session.gd").gold]
+  table_status.text="행동력 %d / 3      점수  %d : %d      배치 %d / 18" % [model.energy,model.player_score,model.opponent_score,model.placed.size()]
+  turn_caption.text="%02d 턴   ·   %s" % [model.turn,"판정 완료" if model.finished else ("진행 중" if busy else "내 차례")]
+  turn_track.set_progress(model.placed.size(),18)
+  garnet_label.text=str(preload("res://scripts/collection_session.gd").gold)
  if busy or model.finished: _hide_hover_direction()
  deck_label.text="덱  %d" % model.deck.size()
  discard_label.text="버림  %d" % model.discard.size()
  exhaust_label.text="소멸  %d" % model.exhausted.size()
- hand_label.text="HAND  %d / 7" % model.hand.size()
+ hand_label.text="%d / %d" % [model.hand.size(),model.total_cards]
  hand_hint.text="가린 카드 클릭 · 뒷면 정체 공개" if model.hand.any(func(entry):return bool(entry.get("concealed",false))) else "우클릭 상세 · 드래그 배치"
  _sync_identity_counter()
  fill_button.disabled=busy or model.finished or model.hand.size()>=5
@@ -618,6 +665,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
  if not event is InputEventKey or not event.pressed or event.echo:return
  if event.keycode==KEY_F3:
   show_performance=not show_performance
+  performance_label.visible=show_performance
   if show_performance:performance_timer.start();_update_performance()
   else:performance_timer.stop();performance_label.text="F3 · 성능 표시"
   get_viewport().set_input_as_handled();return
@@ -866,6 +914,9 @@ func _input(event: InputEvent) -> void:
    camera_keys[key] = true; set_process(true)
    _clear_hand_focus(); get_viewport().set_input_as_handled(); return
  if not is_instance_valid(table) or not is_instance_valid(stage):return
+ if not inspector_open and event is InputEventMouseButton:
+  var hud_point: Vector2=stage.get_global_transform_with_canvas().affine_inverse()*event.position
+  if turn_board.get_rect().has_point(hud_point) or menu_button.get_rect().has_point(hud_point) or Rect2(87,153,37,34).has_point(hud_point):return
  if inspector_open:
   if event is InputEventMouseButton:
    if event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
