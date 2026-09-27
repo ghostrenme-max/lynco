@@ -39,6 +39,8 @@ var hovered_cell := INVALID
 var owner_line_mesh: PlaneMesh
 var owner_dash_mesh: PlaneMesh
 var owner_line_material: StandardMaterial3D
+var owner_plate_mesh: PlaneMesh
+var owner_plate_materials: Dictionary = {}
 
 func _ready() -> void:
  world=$PlacedCards
@@ -61,6 +63,12 @@ func _ready() -> void:
  owner_line_material=StandardMaterial3D.new()
  owner_line_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
  owner_line_material.albedo_color=Color("dddeda")
+ owner_plate_mesh=PlaneMesh.new();owner_plate_mesh.size=Vector2(1.64,2.30)
+ for owner in ["player","opponent"]:
+  var plate_material:=ShaderMaterial.new()
+  plate_material.shader=preload("res://asset/card_owner_plate.gdshader")
+  plate_material.set_shader_parameter("opponent",owner=="opponent")
+  owner_plate_materials[owner]=plate_material
  get_viewport().size_changed.connect(_fit_top_view)
  _setup_atmosphere()
  _setup_garnet_cubes()
@@ -195,6 +203,13 @@ func _label_owner(holder: Node3D, owner: String) -> void:
   _ensure_fan()
   holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
   holder.get_node("Front").material_override=_face_material(holder,"opponent:"+str(holder.get_meta("card_id")))
+ var plate: MeshInstance3D=holder.get_node_or_null("OwnerPlate")
+ if plate==null:
+  plate=MeshInstance3D.new();plate.name="OwnerPlate";plate.mesh=owner_plate_mesh
+  plate.position.y=0.003
+  plate.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  holder.add_child(plate)
+ plate.material_override=owner_plate_materials[owner]
  var existing:=holder.get_node_or_null("OwnerMark")
  if existing:
   holder.remove_child(existing);existing.queue_free()
@@ -333,6 +348,7 @@ func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: boo
  holder.rotation=Vector3(0,PI,0)
  holder.get_node("ContactShadow").hide()
  holder.get_node("OwnerMark").hide()
+ holder.get_node("OwnerPlate").hide()
  _set_card_directions_visible(holder,false)
  var tween:=create_tween()
  # A straight, accelerating insertion with a hard stop; no arc, spin or bounce.
@@ -341,6 +357,7 @@ func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: boo
   if is_instance_valid(holder):
    holder.get_node("ContactShadow").show()
    holder.get_node("OwnerMark").show()
+   holder.get_node("OwnerPlate").show()
    _set_card_directions_visible(holder,true))
  tween.tween_interval(0.02 if quick else 0.04)
  _track(tween)

@@ -26,6 +26,7 @@ func run() -> void:
   check(is_equal_approx(wrapf(holder.rotation.y,0,TAU),PI if enemy else 0.0),"near owner orientation")
   check(is_equal_approx(wrapf(table.mirror_cards[cell].rotation.y,0,TAU),0.0 if enemy else PI),"mirror owner orientation")
   check(holder.get_node("OwnerMark").global_position.z>holder.global_position.z,"mark visible below both orientations")
+  check(holder.get_node("OwnerPlate").material_override.get_shader_parameter("opponent")==enemy,"owner frame independent of card face color")
   check(holder.get_node("OwnerMark").get_child_count()==(4 if enemy else 1),"dashed or solid mark")
   check(holder.get_node("Front").material_override.albedo_texture==table.mirror_cards[cell].get_node("Front").material_override.albedo_texture,"mirror material shared")
   if enemy and not ui.Catalog.card(holder.get_meta("card_id")).dark:enemy_cell=cell
@@ -89,6 +90,7 @@ func run() -> void:
  var slide: Tween=table._slide_opponent(holder,start,finish,false)
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(not child.visible,"directions hidden while opponent card flies")
+ check(not holder.get_node("OwnerPlate").visible,"owner frame hidden during delivery")
  var samples:=0
  while slide.is_running():
   check((holder.position-start).cross(finish-start).length()<0.0001,"strict straight path")
@@ -96,6 +98,7 @@ func run() -> void:
   samples+=1
   await process_frame
  check(samples>3 and holder.position.is_equal_approx(finish),"fast insertion reaches target")
+ check(holder.get_node("OwnerPlate").visible,"owner frame revealed at landing")
  check(holder.get_node("ContactShadow").visible and holder.get_node("OwnerMark").visible,"contact feedback at stop")
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(child.visible,"directions appear after landing")
