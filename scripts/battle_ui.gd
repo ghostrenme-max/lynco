@@ -71,7 +71,7 @@ var direction_hover_uid: int = -1
 var direction_hover_cell := Vector2i(-1,-1)
 var inspector_demo: Panel
 var inspector_comparison: Panel
-var comparison_bands: Array[ColorRect] = []
+var comparison_bands: Array[Panel] = []
 var comparison_titles: Array[Label] = []
 var comparison_effects: Array[Label] = []
 var inspector_diagram: Control
@@ -1326,8 +1326,9 @@ func _build_card_inspector() -> void:
  direction_note.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  inspector_comparison=_panel(inspector_root,Vector2.ZERO,Vector2(350,620),Color("161b18"),18)
  for i in range(2):
-  var band:=ColorRect.new()
+  var band:=Panel.new()
   band.position=Vector2(14,14+i*302);band.size=Vector2(322,290)
+  band.add_theme_stylebox_override("panel",_style(Color("303832"),16,Color.TRANSPARENT,0))
   band.mouse_filter=Control.MOUSE_FILTER_IGNORE
   inspector_comparison.add_child(band)
   comparison_bands.append(band)
@@ -1385,7 +1386,9 @@ func _refresh_inspector_comparison(data: Dictionary) -> void:
  var definitions: Array[Dictionary]=[Catalog.table_card(inspector_source_id),Catalog.back_card(inspector_source_id)]
  for i in range(2):
   var active: bool=inspector_reverse==(i==1)
-  comparison_bands[i].color=Color("303832") if active else Color("111612")
+  comparison_bands[i].self_modulate.a=1.0 if active else 0.08
+  comparison_titles[i].self_modulate.a=1.0 if active else 0.10
+  comparison_effects[i].self_modulate.a=1.0 if active else 0.10
   comparison_titles[i].text=("앞면" if i==0 else "뒷면")+" · "+str(definitions[i].name)
   comparison_titles[i].add_theme_color_override("font_color",Color("f5f7f2") if active else Color("6e7a71"))
   comparison_effects[i].text=Catalog.table_effect_text(inspector_source_id) if i==0 else str(definitions[i].text)

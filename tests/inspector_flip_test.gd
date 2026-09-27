@@ -23,6 +23,10 @@ func run() -> void:
   var front: String=ui.preview_text.text
   check(ui.inspector_comparison.visible,"front shows comparison")
   check(ui.comparison_effects[0].text==ui.Catalog.table_effect_text(entry.id),"front effect comparison")
+  check(ui.comparison_effects[1].self_modulate.a<=0.11 and ui.comparison_titles[1].self_modulate.a<=0.11,"inactive text nearly transparent")
+  for band in ui.comparison_bands:
+   var style: StyleBoxFlat=band.get_theme_stylebox("panel")
+   check(style.corner_radius_top_left==16 and style.corner_radius_top_right==16 and style.corner_radius_bottom_left==16 and style.corner_radius_bottom_right==16,"all comparison corners rounded")
   click_card()
   check(ui.inspector_open and ui.inspector_reverse,"left click switches without closing")
   check(ui.preview_text.text==ui.Catalog.back_card(entry.id).detail,"correct back explanation")
@@ -30,6 +34,7 @@ func run() -> void:
   var special: bool=ui.Catalog.back_identity(entry.id) in ["king","joker"]
   check(ui.inspector_comparison.visible!=special,"king and joker hide comparison")
   if not special:
+   check(ui.comparison_effects[1].self_modulate.a==1.0 and ui.comparison_effects[0].self_modulate.a<=0.11,"opacity swaps with face")
    check(ui.comparison_effects[1].get_theme_color("font_color").r>ui.comparison_effects[0].get_theme_color("font_color").r,"back highlight swaps")
   ui._sync_ui()
   check(ui.inspector_reverse and ui.preview_text.text==ui.Catalog.back_card(entry.id).detail,"refresh preserves back")
