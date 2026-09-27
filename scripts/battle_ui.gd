@@ -896,6 +896,11 @@ func _prepare_table_cards() -> void:
 func _input(event: InputEvent) -> void:
  if get_node("/root/WindowControls").handle_shortcut(event):return
  if event is InputEventKey and event.pressed and not event.echo:
+  if event.physical_keycode==KEY_KP_0 or event.keycode==KEY_KP_0:
+   preload("res://scripts/collection_session.gd").add_preview_items()
+   if is_instance_valid(inventory_layer):inventory_layer.get_child(0).refresh()
+   else:_toast("임시 아이템 6개 준비 · F로 확인")
+   get_viewport().set_input_as_handled();return
   if event.physical_keycode==KEY_F or event.keycode==KEY_F:
    _toggle_inventory();get_viewport().set_input_as_handled();return
   if is_instance_valid(inventory_layer) and event.keycode==KEY_ESCAPE:

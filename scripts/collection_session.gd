@@ -25,3 +25,19 @@ static func equip(id: String) -> bool:
 
 static func selected_cards() -> Array:
  return DECKS[selected].cards.duplicate()
+
+# UI preview fixtures only; these items have no gameplay effects or prices.
+static func add_preview_items() -> void:
+ var names: Array[String]=["관측 렌즈","봉쇄 인장","순환 고리","기억 조각","공허 결정","연쇄 매듭"]
+ var icons: Array[String]=["eye","guard","cycle","memory","void","link"]
+ for i in range(6):
+  var id: String="preview_item_"+str(i)
+  if items.any(func(entry: Dictionary) -> bool:return str(entry.get("id",""))==id):continue
+  items.append({
+   "id":id,
+   "name":names[i],
+   "description":"보유 아이템 화면 확인용 임시 아이템입니다.\n실제 효과와 사용 규칙은 아직 없습니다.",
+   "source":"shop" if i<3 else "black_market",
+   "icon":"res://assets/icons/"+icons[i]+".png",
+   "temporary":true,
+  })

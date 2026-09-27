@@ -34,6 +34,24 @@ func run() -> void:
  key(KEY_ESCAPE);await process_frame
  assert(not is_instance_valid(ui.inventory_layer))
  Session.items.clear()
+ key(KEY_0)
+ assert(Session.items.is_empty(),"number row 0 must not grant items")
+ key(KEY_KP_0)
+ assert(Session.items.size()==6,"keypad 0 adds six preview items")
+ assert(Session.items.filter(func(item):return item.source=="shop").size()==3)
+ assert(Session.items.filter(func(item):return item.source=="black_market").size()==3)
+ key(KEY_F);await process_frame
+ panel=ui.inventory_layer.get_child(0)
+ panel.select_item(4)
+ key(KEY_KP_0);await process_frame
+ assert(Session.items.size()==6 and panel.item_buttons.size()==6,"no duplicates and open inventory refresh")
+ assert(panel.selected_index==4,"selection retained on refresh")
+ Session.items.append({"id":"existing_owned_item","name":"보존 검사"})
+ key(KEY_KP_0)
+ assert(Session.items.size()==7 and Session.items[-1].id=="existing_owned_item","existing items retained")
+ assert(snapshot==JSON.stringify([ui.model.hand,ui.model.energy,ui.model.rng.state,Session.gold]))
+ key(KEY_ESCAPE);await process_frame
+ Session.items.clear()
  ui.table.set_top_view(true);ui.stage.hide()
  key(KEY_F);await process_frame
  assert(is_instance_valid(ui.inventory_layer) and ui.table.top_view)
