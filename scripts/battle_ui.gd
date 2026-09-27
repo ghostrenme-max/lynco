@@ -61,6 +61,9 @@ var inspector_root: Control
 var inspector_card: Panel
 var inspector_styles: Dictionary = {}
 var inspector_open: bool = false
+var inspector_source_id := ""
+var inspector_reverse := false
+var inspector_front_text: Dictionary = {}
 var hover_direction: Control
 var hover_direction_timer: Timer
 var hover_direction_tween: Tween
@@ -519,6 +522,9 @@ func _inspect(uid: int, populate: bool = false) -> void:
  inspect_uid=uid
  # Hidden details need only remember the card; populate from live state on open.
  if not populate and not inspector_open:return
+ if not populate and inspector_open and inspector_reverse:return
+ inspector_source_id=str(model.hand[index].id)
+ inspector_reverse=false
  var data: Dictionary=Catalog.table_card(model.hand[index].id)
  preview_title.text=str(data.name)
  preview_cost.text=str(data.cost)
@@ -977,7 +983,9 @@ func _input(event: InputEvent) -> void:
   if turn_board.get_rect().has_point(hud_point) or (menu_button.visible and menu_button.get_rect().has_point(hud_point)):return
  if inspector_open:
   if event is InputEventMouseButton:
-   if event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
+   if event.pressed and event.button_index==MOUSE_BUTTON_LEFT and inspector_card.get_global_rect().has_point(event.position):
+    _toggle_inspector_face()
+   elif event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
     _close_inspector()
    get_viewport().set_input_as_handled();return
   if event is InputEventMouseMotion:
@@ -1187,6 +1195,9 @@ func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
  get_viewport().push_input(release,true)
 
 func _inspect_placed(id: String, reverse: bool = false, card_owner: String = "player") -> void:
+ inspector_source_id=id
+ inspector_reverse=reverse
+ inspector_front_text={}
  selected_uid=-1;inspect_uid=-1
  for view in views.values():view.set_selected(false)
  var data:Dictionary=Catalog.back_card(id) if reverse else Catalog.table_card(id)
@@ -1322,6 +1333,8 @@ func _fit_inspector() -> void:
  inspector_demo.position=viewport_size*0.5+Vector2(260,-193)*ratio
 
 func _show_inspector(data: Dictionary) -> void:
+ if not inspector_reverse:
+  inspector_front_text={"title":preview_title.text,"cost":preview_cost.text,"kind":preview_kind.text,"detail":preview_text.text,"effect":preview_effect.text,"tooltip":preview_cost.tooltip_text}
  _stop_look();_clear_hand_focus();press_uid=-1;table.hide_preview()
  var dark:bool=bool(data.dark)
  var ink:Color=Color("f6f6f2") if dark else INK
@@ -1341,6 +1354,26 @@ func _show_inspector(data: Dictionary) -> void:
  inspector_score.get_child(0).add_theme_font_size_override("font_size",23)
  inspector_score.queue_redraw()
  inspector_open=true;inspector_root.show()
+
+func _toggle_inspector_face() -> void:
+ if not Catalog.CARDS.has(inspector_source_id):return
+ inspector_reverse=not inspector_reverse
+ var data: Dictionary=Catalog.back_card(inspector_source_id) if inspector_reverse else Catalog.table_card(inspector_source_id)
+ preview_title.text=str(data.name)
+ preview_cost.text=str(data.get("cost_label",data.cost))
+ preview_cost.tooltip_text="비용 미정" if inspector_reverse else "행동력 비용 %d" % int(data.cost)
+ preview_kind.text=str(data.kind) if inspector_reverse else str(data.kind)+" · 앞면"
+ preview_text.text=str(data.detail)
+ preview_effect.text="효과·비용·점수 미정" if inspector_reverse else Catalog.table_effect_text(inspector_source_id)
+ if not inspector_reverse and not inspector_front_text.is_empty():
+  preview_title.text=inspector_front_text.title
+  preview_cost.text=inspector_front_text.cost
+  preview_kind.text=inspector_front_text.kind
+  preview_text.text=inspector_front_text.detail
+  preview_effect.text=inspector_front_text.effect
+  preview_cost.tooltip_text=inspector_front_text.tooltip
+ preview_icon.texture=Symbols.texture_for(data,textures.get(data.icon))
+ _show_inspector(data)
 
 func _close_inspector() -> void:
  if not inspector_open:return
