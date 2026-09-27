@@ -28,6 +28,29 @@ func run() -> void:
  panel=ui.inventory_layer.get_child(0)
  assert(panel.item_buttons.size()==8 and panel.selected_index==0)
  panel.item_buttons[1].pressed.emit()
+ await create_timer(0.25).timeout
+ assert(panel.item_buttons[1].position.y+59==panel.item_list.size.y*0.5)
+ assert(panel.item_buttons[1].scale.x>panel.item_buttons[0].scale.x)
+ assert(panel.item_buttons[1].modulate.r>panel.item_buttons[0].modulate.r)
+ for i in range(2):
+  var wheel:=InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN;wheel.pressed=true
+  root.push_input(wheel,true)
+ assert(panel.selected_index==3)
+ await create_timer(0.25).timeout
+ assert(panel.item_buttons[3].scale.x>panel.item_buttons[2].scale.x)
+ assert(panel.item_buttons[2].scale.x>panel.item_buttons[1].scale.x)
+ assert(panel.item_buttons[2].modulate.r>panel.item_buttons[1].modulate.r)
+ assert(panel.scroll_bar.position.x-(panel.item_list.position.x+195)>=30)
+ await RenderingServer.frame_post_draw
+ root.get_texture().get_image().save_png("res://test-results/inventory_carousel.png")
+ for i in range(20):
+  var wheel:=InputEventMouseButton.new();wheel.button_index=MOUSE_BUTTON_WHEEL_DOWN;wheel.pressed=true
+  root.push_input(wheel,true)
+ assert(panel.selected_index==7)
+ await create_timer(0.25).timeout
+ assert(panel.item_buttons[7].position.y+59==panel.item_list.size.y*0.5)
+ panel.item_buttons[1].pressed.emit()
+ await create_timer(0.25).timeout
  assert(panel.selected_index==1 and panel.source_label.text=="암시장" and panel.preview.texture!=null)
  await RenderingServer.frame_post_draw
  root.get_texture().get_image().save_png("res://test-results/inventory_sample.png")
