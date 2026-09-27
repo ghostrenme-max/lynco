@@ -672,7 +672,7 @@ func _setup_garnet_cubes() -> void:
  var mesh: ArrayMesh=surface.commit()
  var material:=ShaderMaterial.new()
  material.shader=preload("res://asset/garnet_glass.gdshader")
- var positions: Array[Vector3]=[Vector3(7.3,0.245,5.2),Vector3(7.9,0.245,5.2),Vector3(7.6,0.245,4.6)]
+ var positions: Array[Vector3]=[Vector3(8.0,0.245,6.2),Vector3(8.6,0.245,6.2),Vector3(8.3,0.245,5.6)]
  for i in range(3):
   var cube:=MeshInstance3D.new()
   cube.name="Garnet"+str(i+1);cube.mesh=mesh;cube.material_override=material
