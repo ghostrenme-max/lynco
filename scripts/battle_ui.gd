@@ -1186,7 +1186,7 @@ func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
  release.position=transform*end;release.global_position=release.position
  get_viewport().push_input(release,true)
 
-func _inspect_placed(id: String, reverse: bool = false, owner: String = "player") -> void:
+func _inspect_placed(id: String, reverse: bool = false, card_owner: String = "player") -> void:
  selected_uid=-1;inspect_uid=-1
  for view in views.values():view.set_selected(false)
  var data:Dictionary=Catalog.back_card(id) if reverse else Catalog.table_card(id)
@@ -1194,7 +1194,7 @@ func _inspect_placed(id: String, reverse: bool = false, owner: String = "player"
  preview_title.text=str(data.name);preview_cost.text=str(data.get("cost_label",data.cost))
  preview_icon.texture=Symbols.texture_for(data, textures.get(data.icon))
  preview_kind.text="%s · 정체 공개 / 효과 미정" % str(data.kind) if reverse else "%s · 테이블에 배치됨" % str(data.kind)
- preview_kind.text=("상대 카드 · " if owner=="opponent" else "내 카드 · ")+preview_kind.text
+ preview_kind.text=("상대 카드 · " if card_owner=="opponent" else "내 카드 · ")+preview_kind.text
  preview_text.text=str(data.detail)
  preview_effect.text="효과·비용·점수 미정" if reverse else "최종 판정까지 테이블에 유지"
  preview_effect.add_theme_color_override("font_color",Color("e0e2e4"))

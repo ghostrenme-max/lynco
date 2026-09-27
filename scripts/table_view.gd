@@ -213,15 +213,15 @@ func pan_by(direction: Vector2, delta: float) -> void:
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
 
-func mark_owner(cell: Vector2i, owner: String) -> void:
+func mark_owner(cell: Vector2i, card_owner: String) -> void:
  if not cards.has(cell): return
  for holder in [cards[cell],mirror_cards[cell]]:
-  _label_owner(holder,owner)
+  _label_owner(holder,card_owner)
  _refresh_battle_grid()
 
-func _label_owner(holder: Node3D, owner: String) -> void:
- holder.set_meta("owner",owner)
- if owner=="opponent":
+func _label_owner(holder: Node3D, card_owner: String) -> void:
+ holder.set_meta("owner",card_owner)
+ if card_owner=="opponent":
   _ensure_fan()
   holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
   holder.get_node("Front").material_override=_face_material(holder,"opponent:"+str(holder.get_meta("card_id")))
@@ -231,16 +231,16 @@ func _label_owner(holder: Node3D, owner: String) -> void:
  var mark:=Node3D.new();mark.name="OwnerMark";holder.add_child(mark)
  var inverted: bool=bool(holder.get_meta("mirror",false))
  mark.position=Vector3(0,-0.025,-1.17 if inverted else 1.17)
- var segments: int=4 if owner=="opponent" else 1
+ var segments: int=4 if card_owner=="opponent" else 1
  for i in range(segments):
   var line:=MeshInstance3D.new()
-  line.mesh=owner_dash_mesh if owner=="opponent" else owner_line_mesh
-  var material: StandardMaterial3D=opponent_mark_material if owner=="opponent" else owner_line_material
+  line.mesh=owner_dash_mesh if card_owner=="opponent" else owner_line_mesh
+  var material: StandardMaterial3D=opponent_mark_material if card_owner=="opponent" else owner_line_material
   line.material_override=_far_material(material) if bool(holder.get_meta("mirror",false)) else material
   line.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-  line.position.x=(float(i)-1.5)*0.29 if owner=="opponent" else 0.0
+  line.position.x=(float(i)-1.5)*0.29 if card_owner=="opponent" else 0.0
   mark.add_child(line)
- if owner=="opponent":
+ if card_owner=="opponent":
   var side:=MeshInstance3D.new()
   side.name="OwnerSide"
   side.mesh=opponent_side_mesh

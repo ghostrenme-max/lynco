@@ -1,5 +1,4 @@
 extends Control
-signal closed
 const Session=preload("res://scripts/collection_session.gd")
 var stage: Control
 var title_label: Label
