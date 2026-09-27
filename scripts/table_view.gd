@@ -14,12 +14,18 @@ var camera: Camera3D
 @export_range(1.0, 20.0) var look_yaw_limit_degrees: float = 12.0
 @export_range(1.0, 12.0) var look_pitch_limit_degrees: float = 7.0
 @export var look_sensitivity: float = 0.002
+@export var pan_speed: float = 3.0
+@export var pan_limits := Vector2(3.5,2.5)
+var base_camera_position: Vector3
 var base_camera_rotation: Vector3
 var look_offset := Vector2.ZERO
 var cards: Dictionary = {}
 var materials: Dictionary = {}
 var back_materials: Dictionary = {}
 var black_body_material: StandardMaterial3D
+const Directions = preload("res://scripts/direction_preview.gd")
+var direction_mesh: PlaneMesh
+var direction_material: ShaderMaterial
 const Catalog = preload("res://scripts/catalog.gd")
 var hint: MeshInstance3D
 var hint_material: ShaderMaterial
@@ -32,6 +38,7 @@ func _ready() -> void:
  world=$PlacedCards
  camera=$Camera3D
  base_camera_rotation=camera.rotation
+ base_camera_position=camera.position
  black_body_material=StandardMaterial3D.new()
  black_body_material.albedo_color=Color(0.025,0.028,0.025,1.0)
  black_body_material.roughness=0.9
@@ -40,6 +47,9 @@ func _ready() -> void:
  hint_material.shader=preload("res://asset/card_placement.gdshader")
  hint=MeshInstance3D.new();hint.mesh=card_mesh;hint.material_override=hint_material
  world.add_child(hint);hint.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF;hint.hide()
+ direction_mesh=PlaneMesh.new();direction_mesh.size=Vector2(0.28,0.34)
+ direction_material=ShaderMaterial.new()
+ direction_material.shader=preload("res://asset/card_direction.gdshader")
  set_process(false)
 
 func set_card_texture(id: String, texture: Texture2D) -> void:
@@ -96,16 +106,18 @@ func hide_preview() -> void:
  if hint.visible:hint.hide()
  preview_cell=INVALID
 
-func place(id: String, cell: Vector2i, quick: bool = false) -> void:
+func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = false) -> void:
  assert(free_cell(cell))
  var holder:Node3D=CARD_OBJECT.instantiate();world.add_child(holder)
  holder.position=cell_position(cell)+Vector3(0,0.65,0)
  holder.rotation.x=0.32
  holder.set_meta("card_id",id)
- var dark:bool=bool(Catalog.card(id).dark)
+ holder.set_meta("reverse", reverse)
+ var dark:bool=bool(Catalog.back_card(id).dark if reverse else Catalog.card(id).dark)
  if dark:holder.get_node("Body").material_override=black_body_material
- holder.get_node("Front").material_override=materials[id]
+ holder.get_node("Front").material_override=materials["reverse:" + id if reverse else id]
  holder.get_node("Back").material_override=back_materials["back_black" if dark else "back_white"]
+ _add_direction_arrows(holder,Catalog.back_card(id) if reverse else Catalog.card(id),quick)
  cards[cell]=holder
  var tween:=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
  var duration:=0.1 if quick else 0.22
@@ -137,3 +149,35 @@ func look_by(relative: Vector2) -> void:
 func reset_look() -> void:
  look_offset=Vector2.ZERO
  camera.rotation=base_camera_rotation
+ camera.position=base_camera_position
+
+func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> void:
+ direction_material.set_shader_parameter("reduced_motion",quick)
+ for key in Directions.for_definition(data):
+  var offset:Vector2=Directions.OFFSETS[key]
+  var arrow:=MeshInstance3D.new()
+  arrow.name="Direction_"+str(key)
+  arrow.mesh=direction_mesh
+  arrow.material_override=direction_material
+  arrow.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  arrow.position=Vector3(offset.x*0.60,0.038,offset.y*0.95)
+  arrow.rotation.y=-offset.angle()-PI*0.5
+  holder.add_child(arrow)
+
+func pan_by(direction: Vector2, delta: float) -> void:
+ var step := direction.limit_length() * pan_speed * delta
+ camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
+ camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
+
+func mark_owner(cell: Vector2i, owner: String) -> void:
+ if not cards.has(cell): return
+ var holder: Node3D = cards[cell]
+ holder.set_meta("owner",owner)
+ var label := Label3D.new()
+ label.text = "상대" if owner == "opponent" else "나"
+ label.font_size = 44; label.pixel_size = 0.006
+ label.position = Vector3(0,0.055,1.0)
+ label.rotation_degrees.x = -90
+ label.modulate = Color("f0f0ea") if owner == "opponent" else Color("f5d335")
+ label.no_depth_test = false
+ holder.add_child(label)

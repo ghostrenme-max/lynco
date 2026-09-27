@@ -61,10 +61,13 @@ static func button(parent: Node, text: String, rect: Rect2, primary: bool = fals
  parent.add_child(node)
  return node
 
+static var _ink_shader: Shader
+
 static func ink_material(white: bool = false) -> ShaderMaterial:
- var shader := Shader.new()
- shader.code = "shader_type canvas_item; uniform vec4 ink : source_color; void fragment(){COLOR = vec4(ink.rgb, texture(TEXTURE, UV).a * ink.a);}"
+ if _ink_shader == null:
+  _ink_shader = Shader.new()
+  _ink_shader.code = "shader_type canvas_item; uniform vec4 ink : source_color; void fragment(){COLOR = vec4(ink.rgb, texture(TEXTURE, UV).a * ink.a);}"
  var material := ShaderMaterial.new()
- material.shader = shader
+ material.shader = _ink_shader
  material.set_shader_parameter("ink", Color.WHITE if white else INK)
  return material

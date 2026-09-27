@@ -1,5 +1,7 @@
 extends Control
 
+const Symbols = preload("res://scripts/card_symbols.gd")
+
 const UI = preload("res://scripts/screen_style.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Card = preload("res://scripts/card_view.gd")
@@ -22,6 +24,12 @@ var page_size: int = 6
 var dark_ink: ShaderMaterial
 var light_ink: ShaderMaterial
 var gallery: Control
+# Immutable per-screen styles; selection only switches references.
+var idle_card_style: StyleBoxFlat
+var hover_card_style: StyleBoxFlat
+var selected_card_style: StyleBoxFlat
+var light_detail_style: StyleBoxFlat
+var dark_detail_style: StyleBoxFlat
 
 func _ready() -> void:
  # Existing command-line battle checks keep their original entry point.
@@ -63,9 +71,11 @@ func _build_main() -> void:
  action_buttons.start.pressed.connect(_navigate.bind("res://scenes/battle.tscn"))
  action_buttons.book = UI.button(stage, "수집 카드북", Rect2(92, 653, 330, 62))
  action_buttons.book.pressed.connect(_navigate.bind("res://scenes/card_book.tscn"))
+ action_buttons.shop = UI.button(stage,"덱 상점",Rect2(92,728,510,58))
+ action_buttons.shop.pressed.connect(_navigate.bind("res://scenes/shop.tscn"))
  action_buttons.quit = UI.button(stage, "종료", Rect2(440, 653, 162, 62))
  action_buttons.quit.pressed.connect(func(): get_tree().quit())
- UI.label(stage, "현재 구현된 전투로 시작합니다. 진행은 저장되지 않습니다.", Rect2(94, 742, 720, 34), 18, UI.MUTED)
+ UI.label(stage, "테이블 점수 대전 · 골드와 해금은 실행 중에만 유지됩니다.", Rect2(94, 794, 750, 34), 18, UI.MUTED)
  UI.panel(stage, Rect2(909, 149, 603, 606), Color("eeeee7"))
  _card(stage, "observe", Vector2(958, 243), 1.65, -0.12)
  _card(stage, "strike", Vector2(1210, 321), 1.65, 0.13)
@@ -74,10 +84,10 @@ func _build_main() -> void:
  action_buttons.start.grab_focus()
 
 func _card(parent: Node, id: String, pos: Vector2, zoom: float, angle: float = 0.0) -> Control:
- var data: Dictionary = Catalog.card(id)
+ var data: Dictionary = Catalog.table_card(id)
  var node := Card.new()
  parent.add_child(node)
- node.setup({"uid":-1}, data, load("res://assets/icons/%s.png" % data.icon), light_ink if bool(data.dark) else dark_ink, null)
+ node.setup({"uid":-1}, data, Symbols.texture_for(data), light_ink if bool(data.dark) else dark_ink, null)
  node.pivot_offset = Vector2.ZERO
  node.position = pos
  node.scale = Vector2.ONE * zoom
@@ -87,12 +97,22 @@ func _card(parent: Node, id: String, pos: Vector2, zoom: float, angle: float = 0
  node.outline_style.shadow_size = 0
  return node
 
+var owner_panel: Panel
+
 func _build_book() -> void:
+ idle_card_style = UI.style(Color.TRANSPARENT)
+ hover_card_style = UI.style(Color.TRANSPARENT, UI.INK, 2)
+ selected_card_style = UI.style(Color.TRANSPARENT, UI.YELLOW, 3)
+ light_detail_style = UI.style(Color.WHITE)
+ dark_detail_style = UI.style(UI.INK)
  UI.label(stage, "LYNCO   /   수집 카드북", Rect2(76, 45, 1000, 55), 36)
  action_buttons.back = UI.button(stage, "←  메인으로", Rect2(1288, 48, 236, 52))
  action_buttons.back.pressed.connect(_navigate.bind("res://scenes/main_menu.tscn"))
- UI.label(stage, "기존 카드 %d종 열람 · 수집 해금과 영구 저장은 아직 적용되지 않았습니다." % Catalog.CARDS.size(), Rect2(78, 121, 1440, 36), 20, UI.MUTED)
+ UI.label(stage, "카드 %d종 열람 · 돋보기로 덱 주인 확인 / 구매는 상점에서" % Catalog.CARDS.size(), Rect2(78, 121, 1440, 36), 20, UI.MUTED)
  UI.label(stage, "카드 목록", Rect2(78, 181, 410, 34), 23)
+ var owner_button := UI.button(stage,"⌕ 덱 주인",Rect2(1050,121,215,48))
+ owner_button.tooltip_text = "돋보기 · 선택한 카드가 포함된 덱과 주인 확인"
+ owner_button.pressed.connect(_show_owners)
  detail_panel = UI.panel(stage, Rect2(946, 202, 578, 602), Color.WHITE)
  selected_label = UI.label(detail_panel, "선택한 카드", Rect2(38, 28, 470, 30), 18, UI.MUTED)
  detail_title = UI.label(detail_panel, "", Rect2(38, 79, 510, 60), 37)
@@ -124,6 +144,7 @@ func _fill_page() -> void:
   gallery.remove_child(child)
   child.queue_free()
  card_buttons.clear()
+ selected_id = ""
  var ids: Array = Catalog.CARDS.keys()
  var first: int = page * page_size
  for index in range(first, mini(first + page_size, ids.size())):
@@ -132,10 +153,10 @@ func _fill_page() -> void:
   var pos := Vector2(88 + (slot % 3) * 282, 240 + (slot / 3) * 304)
   _card(gallery, id, pos, 1.2)
   var button := UI.button(gallery, "", Rect2(pos - Vector2(9, 9), Vector2(208, 292)))
-  button.tooltip_text = str(Catalog.card(id).name) + " · 상세 보기"
-  button.add_theme_stylebox_override("normal", UI.style(Color.TRANSPARENT))
-  button.add_theme_stylebox_override("hover", UI.style(Color.TRANSPARENT, UI.INK, 2))
-  button.add_theme_stylebox_override("pressed", UI.style(Color.TRANSPARENT, UI.YELLOW, 3))
+  button.tooltip_text = str(Catalog.table_card(id).name) + " · 상세 보기"
+  button.add_theme_stylebox_override("normal", idle_card_style)
+  button.add_theme_stylebox_override("hover", hover_card_style)
+  button.add_theme_stylebox_override("pressed", selected_card_style)
   button.pressed.connect(_select_card.bind(id))
   card_buttons[id] = button
  page_label.text = "%d–%d / %d" % [first + 1, mini(first + page_size, ids.size()), ids.size()]
@@ -148,25 +169,29 @@ func _page_by(delta: int) -> void:
  card_buttons[selected_id].grab_focus()
 
 func _select_card(id: String) -> void:
+ if selected_id == id: return
+ if card_buttons.has(selected_id):
+  card_buttons[selected_id].add_theme_stylebox_override("normal", idle_card_style)
+  card_buttons[selected_id].add_theme_stylebox_override("hover", hover_card_style)
  selected_id = id
- var data: Dictionary = Catalog.card(id)
+ var data: Dictionary = Catalog.table_card(id)
  var dark: bool = bool(data.dark)
  var ink: Color = Color.WHITE if dark else UI.INK
  var muted: Color = Color("c4c7c0") if dark else UI.MUTED
- detail_panel.add_theme_stylebox_override("panel", UI.style(UI.INK if dark else Color.WHITE))
+ detail_panel.add_theme_stylebox_override("panel", dark_detail_style if dark else light_detail_style)
  selected_label.text = "선택됨   /   " + ("검정 카드" if dark else "흰색 카드")
  selected_label.add_theme_color_override("font_color", muted)
  detail_title.text = str(data.name)
- detail_meta.text = "행동력 %d   /   %s" % [int(data.cost), str(data.kind)]
+ detail_meta.text = "행동 %d / 테이블 %d / %s" % [int(data.cost),int(data.table_cost),str(data.kind)]
  detail_body.text = str(data.detail)
- detail_note.text = "사용 후 전투 내 소멸" if bool(data.get("exhaust", false)) else "현재 전투의 카드 정의"
+ detail_note.text = "테이블에 유지 · 수치와 추가 효과는 시험 중"
  for label in [detail_title, detail_meta, detail_body]: label.add_theme_color_override("font_color", ink)
  detail_note.add_theme_color_override("font_color", muted)
- detail_icon.texture = load("res://assets/icons/%s.png" % data.icon)
- detail_icon.material = light_ink if dark else dark_ink
- for key in card_buttons:
-  card_buttons[key].add_theme_stylebox_override("normal", UI.style(Color.TRANSPARENT, UI.YELLOW if key == id else Color.TRANSPARENT, 3 if key == id else 0))
-  card_buttons[key].add_theme_stylebox_override("hover", UI.style(Color.TRANSPARENT, UI.YELLOW if key == id else UI.INK, 3 if key == id else 2))
+ detail_icon.texture = Symbols.texture_for(data)
+ detail_icon.material = Symbols.material_for(data, light_ink if dark else dark_ink)
+ if card_buttons.has(id):
+  card_buttons[id].add_theme_stylebox_override("normal", selected_card_style)
+  card_buttons[id].add_theme_stylebox_override("hover", selected_card_style)
 
 func _navigate(path: String) -> void:
  if navigating: return
@@ -177,6 +202,26 @@ func _navigate(path: String) -> void:
   push_error("화면 이동 실패: %s (%s)" % [path, error])
 
 func _unhandled_key_input(event: InputEvent) -> void:
+ if is_instance_valid(owner_panel) and owner_panel.visible and event.is_action_pressed("ui_cancel"):
+  owner_panel.hide(); get_viewport().set_input_as_handled(); return
  if card_book and event.is_action_pressed("ui_cancel"):
   get_viewport().set_input_as_handled()
   _navigate("res://scenes/main_menu.tscn")
+
+func _show_owners() -> void:
+ if is_instance_valid(owner_panel):
+  stage.remove_child(owner_panel); owner_panel.queue_free()
+ owner_panel = UI.panel(stage,Rect2(350,220,900,440),UI.PAPER)
+ owner_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+ owner_panel.z_index = 100
+ UI.label(owner_panel,"돋보기 / 덱 주인",Rect2(35,24,820,50),32)
+ var text := "‘%s’이(가) 포함된 덱\n\n" % Catalog.card(selected_id).name
+ var session = preload("res://scripts/collection_session.gd")
+ for id in session.DECKS:
+  var data: Dictionary = session.DECKS[id]
+  if selected_id in data.cards: text += "%s — 주인: %s (%s)\n" % [data.name,data.owner,"해금됨" if id in session.unlocked else "미해금"]
+ UI.label(owner_panel,text,Rect2(35,98,830,215),24)
+ var shop := UI.button(owner_panel,"상점으로",Rect2(35,344,385,58),true)
+ shop.pressed.connect(_navigate.bind("res://scenes/shop.tscn"))
+ var close := UI.button(owner_panel,"닫기",Rect2(470,344,385,58))
+ close.pressed.connect(func(): owner_panel.hide())

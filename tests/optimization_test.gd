@@ -12,7 +12,7 @@ func _run() -> void:
  ui._test_pointer(Vector2(350,105))
  await create_timer(0.2).timeout
  var uid:int=int(ui.model.hand[0].uid)
- var data:Dictionary=ui.Catalog.card(ui.model.hand[0].id)
+ var data:Dictionary=ui.Catalog.table_card(ui.model.hand[0].id)
  var energy:int=ui.model.energy
  ui._test_inspect_card(uid)
  assert(ui.inspector_open and ui.preview_title.text==str(data.name))

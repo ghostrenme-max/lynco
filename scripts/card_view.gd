@@ -1,6 +1,8 @@
 class_name LyncoCardView
 extends Control
 
+const Symbols = preload("res://scripts/card_symbols.gd")
+
 signal chosen(uid: int)
 signal activated(uid: int)
 signal focus_changed(uid: int, inside: bool)
@@ -25,6 +27,7 @@ var title_label: Label
 var reason_label: Label
 var outline_style: StyleBoxFlat
 var face_up: bool = true
+var concealed: bool = false
 var face_nodes: Array[CanvasItem] = []
 var back_logo: TextureRect
 
@@ -51,27 +54,31 @@ func setup(entry: Dictionary, definition: Dictionary, icon: Texture2D, material_
  background.mouse_filter = Control.MOUSE_FILTER_IGNORE
  background.add_theme_stylebox_override("panel", outline_style)
  add_child(background)
- var cost := _label(str(data.cost), Vector2(12, 10), Vector2(28, 30), 23, ink)
+ var cost := _label(str(data.get("cost_label", data.cost)), Vector2(12, 10), Vector2(28, 30), 23, ink)
  cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
  title_label = _label(str(data.name), Vector2(44, 13), Vector2(106, 24), 17, ink)
  _label(str(data.kind), Vector2(45, 38), Vector2(102, 18), 11, Color("bcbfb4") if dark else Color("777b72"))
  var picture := TextureRect.new()
  picture.position = Vector2(38, 62)
  picture.size = Vector2(82, 82)
- picture.texture = icon
+ picture.texture = Symbols.texture_for(data, icon)
  picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
  picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
  picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
- picture.material = material_override
+ picture.material = Symbols.material_for(data, material_override)
  add_child(picture)
  var separator := ColorRect.new()
  separator.position = Vector2(16, 153); separator.size = Vector2(126, 1)
  separator.color = Color("454941") if dark else Color("e2e4dc")
  separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
  add_child(separator)
- var body := _label(str(data.text), Vector2(9, 163), Vector2(140, 44), 15, ink)
+ var body := _label(str(data.text), Vector2(9, 162), Vector2(140, 30), 15, ink)
  body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
- reason_label = _label("", Vector2(8, 207), Vector2(142, 16), 10, Color("b87230"))
+ var badge := preload("res://scripts/table_cost_badge.gd").new()
+ badge.position = Vector2(117,190); badge.size = Vector2(34,34)
+ badge.value = str(data.get("table_cost","—")); badge.dark = dark
+ add_child(badge)
+ reason_label = _label("", Vector2(6,201), Vector2(110,22), 10, Color("b87230"))
  reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
  for child in get_children():
   if child != background and child is CanvasItem: face_nodes.append(child)
@@ -143,7 +150,7 @@ func set_hand_focus(focused_uid: int, animate: bool = true) -> void:
 func set_selected(value: bool) -> void:
  if selected == value: return
  selected = value
- outline_style.border_color = Color("d9b91b") if selected else (Color("383b37") if bool(data.dark) else Color("c5c8c1"))
+ outline_style.border_color = Color("d9b91b") if selected else (Color("383b37") if bool(data.dark) or concealed else Color("c5c8c1"))
  outline_style.set_border_width_all(2 if selected else 1)
  if not locked: update_pose()
 
@@ -166,3 +173,15 @@ func update_pose(duration: float = 0.13) -> void:
 
 func stop_motion() -> void:
  if movement and movement.is_valid(): movement.kill()
+
+
+func conceal(common_texture: Texture2D) -> void:
+ concealed = true
+ # Identical cover, body, scale and cursor prevent colour/cost identity leaks.
+ back_logo.texture = common_texture
+ back_logo.material = BLACK_BACK_MATERIAL
+ outline_style.bg_color = Color("181a19")
+ outline_style.border_color = Color("383b37")
+ outline_style.set_border_width_all(1)
+ set_face_up(false)
+ set_available(true, "")

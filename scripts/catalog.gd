@@ -17,3 +17,42 @@ const PERKS: Array[Dictionary] = [] # Deliberately not implementing an undecided
 
 static func card(id: String) -> Dictionary:
  return CARDS[id]
+
+
+# Temporary identity mapping for interaction verification; effects remain undecided.
+# This mapping is fixed by card definition, never rerolled by Shift.
+const BACK_IDENTITIES := {"guard":"king", "echo":"joker"}
+static var _back_definitions: Dictionary = {}
+
+static func back_identity(id: String) -> String:
+ return str(BACK_IDENTITIES.get(id, "normal"))
+
+static func back_card(id: String) -> Dictionary:
+ if not _back_definitions.has(id):
+  var front: Dictionary = card(id)
+  var identity: String = back_identity(id)
+  var special: bool = identity != "normal"
+  _back_definitions[id] = {
+   "name": ("킹" if identity == "king" else "조커") if special else str(front.name) + "′",
+   "cost":0, "cost_label":"—", "icon":identity if special else front.icon,
+   "kind":str(front.name) + "의 뒷면", "dark":true,
+   "text":"정체 공개\n효과 미정",
+   "detail":str(front.name) + "의 고정된 뒷면입니다.\n현재는 정체 공개만 확인합니다.\n효과와 비용은 적용하지 않습니다.",
+   "effect":"pending_back", "value":0, "identity":identity,
+  }
+ return _back_definitions[id]
+
+# Separate from action cost; temporary balance numbers for table adjudication.
+const TABLE_VALUES := {"strike":4,"observe":2,"guard":3,"echo":1,"cycle":1,"link":6}
+static func table_effect_text(id: String) -> String:
+ match id:
+  "observe", "echo": return "카드 1장 드로우"
+  "cycle": return "행동력 +1"
+  _: return "추가 효과 설계 대기"
+
+static func table_card(id: String) -> Dictionary:
+ var data: Dictionary = card(id).duplicate()
+ data["table_cost"] = TABLE_VALUES[id]
+ data["text"] = table_effect_text(id)
+ data["detail"] = "행동 비용 %d · 테이블 코스트 %d\n%s\n배치한 카드는 판정까지 유지됩니다." % [data.cost,TABLE_VALUES[id],table_effect_text(id)]
+ return data

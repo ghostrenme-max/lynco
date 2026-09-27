@@ -17,10 +17,10 @@ void fragment() {
  vec2 source_size = vec2(textureSize(TEXTURE,0));
  // Match the white back logo footprint, preserving the PNG aspect ratio.
  vec2 visible_size = source_size * logo_region.zw;
- float scale = min(65.0/visible_size.x,71.2/visible_size.y);
+ float scale = 1.5 * min(65.0/visible_size.x,71.2/visible_size.y);
  vec2 logo_uv = p / (source_size*scale) + logo_region.xy + logo_region.zw*0.5;
  vec4 logo = texture(TEXTURE,clamp(logo_uv,vec2(0.0),vec2(1.0)));
  float inside = step(0.0,logo_uv.x)*step(logo_uv.x,1.0)*step(0.0,logo_uv.y)*step(logo_uv.y,1.0);
- vec3 color = mix(vec3(line*0.85),logo.rgb,logo.a*inside);
+ vec3 color = mix(vec3(line*0.85),vec3(140.0,38.0,51.0)/255.0,logo.a*inside);
  COLOR = vec4(color,1.0-smoothstep(-edge,edge,outer))*tint;
 }

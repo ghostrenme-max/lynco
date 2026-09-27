@@ -67,6 +67,7 @@ func unavailable_reason(uid: int) -> String:
  var index := find_card(uid)
  if index < 0:
   return "손에 없는 카드입니다"
+ if bool(hand[index].get("concealed", false)): return "" # Unspecified back costs must not leak identity.
  if int(Catalog.card(hand[index].id).cost) > energy:
   return "행동력이 부족합니다"
  return ""
@@ -75,6 +76,7 @@ func preview(uid: int) -> String:
  var index := find_card(uid)
  if index < 0:
   return ""
+ if bool(hand[index].get("concealed", false)): return "가려진 카드 · 선택하면 뒷면 정체 공개 / 효과 미정"
  var data: Dictionary = Catalog.card(hand[index].id)
  match str(data.effect):
   "damage": return "예상 피해 %d%s" % [int(data.value) + (4 if observed else 0), " · 연계 +4" if observed else ""]
@@ -89,6 +91,11 @@ func play(uid: int) -> Dictionary:
   return {"ok":false, "reason":reason}
  var index := find_card(uid)
  var entry: Dictionary = hand[index]
+ if bool(entry.get("concealed", false)):
+  hand.remove_at(index)
+  entry.erase("concealed")
+  discard.append(entry)
+  return {"ok":true, "entry":entry, "damage":0, "extra":0, "drawn":[], "effect":"pending_back", "reverse":true}
  var data: Dictionary = Catalog.card(entry.id)
  # Atomic state transition: remove the card before resolving any effect.
  hand.remove_at(index)
@@ -129,6 +136,7 @@ func end_turn() -> Dictionary:
  var incoming := intent()
  var absorbed := mini(incoming, block)
  health = maxi(0, health - maxi(0, incoming - block))
+ for entry in hand: entry.erase("concealed")
  discard.append_array(hand)
  hand.clear()
  if health == 0:
@@ -136,7 +144,7 @@ func end_turn() -> Dictionary:
   return {"ok":true, "damage":incoming - absorbed, "absorbed":absorbed, "drawn":[]}
  turn += 1
  block = 0; observed = false; energy = int(Catalog.CHARACTER.energy)
- var drawn := draw_cards(int(Catalog.CHARACTER.draw))
+ var drawn: Array = fill_hand().drawn
  return {"ok":true, "damage":incoming - absorbed, "absorbed":absorbed, "drawn":drawn}
 
 func conserved() -> bool:
@@ -146,3 +154,51 @@ func conserved() -> bool:
    if ids.has(entry.uid): return false
    ids[entry.uid] = true
  return ids.size() == total_cards and energy >= 0 and hand.size() <= int(Catalog.CHARACTER.hand_limit)
+
+
+func is_concealed(uid: int) -> bool:
+ var index: int = find_card(uid)
+ return index >= 0 and bool(hand[index].get("concealed", false))
+
+func identity_counts() -> Dictionary:
+ var counts := {"king":0, "joker":0}
+ for entry in hand:
+  var identity: String = Catalog.back_identity(str(entry.id))
+  if counts.has(identity): counts[identity] += 1
+ return counts
+
+func conceal_and_shuffle() -> bool:
+ if finished or hand.is_empty(): return false
+ for entry in hand: entry["concealed"] = true
+ _shuffle(hand)
+ return true
+
+func fill_hand() -> Dictionary:
+ var drawn: Array[Dictionary] = []
+ if finished: return {"drawn":drawn, "reason":"전투가 종료되었습니다"}
+ if hand.size() >= 5: return {"drawn":drawn, "reason":"손패가 이미 5장 이상입니다"}
+ while hand.size() < 5:
+  # Only the final slot needs an identity scan; preserve candidate/RNG order.
+  var needs_special: bool = false
+  if hand.size() == 4:
+   var counts: Dictionary = identity_counts()
+   needs_special = int(counts.king) + int(counts.joker) == 0
+  if needs_special:
+   var candidates: Array[Dictionary] = []
+   for pile in [deck, discard]:
+    for entry in pile:
+     if Catalog.back_identity(str(entry.id)) != "normal": candidates.append(entry)
+   if candidates.is_empty():
+    return {"drawn":drawn, "reason":"남은 더미에 킹·조커 카드가 없어 마지막 칸을 보충할 수 없습니다"}
+   var entry: Dictionary = candidates[rng.randi_range(0, candidates.size() - 1)]
+   deck.erase(entry)
+   discard.erase(entry)
+   entry.erase("concealed")
+   hand.append(entry)
+   drawn.append(entry)
+  else:
+   var next: Array[Dictionary] = draw_cards(1)
+   if next.is_empty(): return {"drawn":drawn, "reason":"뽑을 카드가 없습니다"}
+   next[0].erase("concealed")
+   drawn.append_array(next)
+ return {"drawn":drawn, "reason":""}

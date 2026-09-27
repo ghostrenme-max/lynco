@@ -79,8 +79,8 @@ func _run() -> void:
  for id in Catalog.CARDS:
   await _click(current_scene.card_buttons[id])
   _check(current_scene.selected_id == id, "select " + id)
-  _check(current_scene.detail_body.text == Catalog.card(id).detail, "shared effect " + id)
-  _check(current_scene.detail_meta.text.contains(str(Catalog.card(id).cost)), "shared cost " + id)
+  _check(current_scene.detail_body.text == Catalog.table_card(id).detail, "shared effect " + id)
+  _check(current_scene.detail_meta.text.contains(str(Catalog.table_card(id).cost)), "shared cost " + id)
  await _capture("card_book_1280")
  root.size = Vector2i(1440, 810)
  await _settle()

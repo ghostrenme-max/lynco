@@ -1,6 +1,11 @@
 extends Control
 
-const Model = preload("res://scripts/battle_model.gd")
+const DirectionDiagram = preload("res://scripts/direction_diagram.gd")
+const Directions = preload("res://scripts/direction_preview.gd")
+
+const Symbols = preload("res://scripts/card_symbols.gd")
+
+const Model = preload("res://scripts/table_battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Card = preload("res://scripts/card_view.gd")
 const Table = preload("res://scripts/table_view.gd")
@@ -44,6 +49,7 @@ var deck_label: Label
 var discard_label: Label
 var exhaust_label: Label
 var hand_label: Label
+var hand_hint: Label
 var preview_icon: TextureRect
 var preview_title: Label
 var preview_cost: Label
@@ -55,6 +61,20 @@ var inspector_root: Control
 var inspector_card: Panel
 var inspector_styles: Dictionary = {}
 var inspector_open: bool = false
+var hover_direction: Control
+var hover_direction_timer: Timer
+var hover_direction_tween: Tween
+var direction_hover_uid: int = -1
+var direction_hover_cell := Vector2i(-1,-1)
+var inspector_demo: Panel
+var inspector_diagram: Control
+var direction_note: Label
+var fill_button: Button
+var shift_button: Button
+var identity_counter: Panel
+var king_count: Label
+var joker_count: Label
+var shuffle_phase: String = "idle"
 var menu_button: Button
 var leaving_battle: bool = false
 var end_button: Button
@@ -90,14 +110,16 @@ func _ready() -> void:
  theme = ui_theme
  for key in ["enemy", "eye", "void", "guard", "memory", "cycle", "link"]:
   textures[key] = load("res://assets/icons/%s.png" % key)
- textures["back_white"] = load("res://asset/card_back_white.png")
- textures["back_black"] = load("res://asset/black_back_logo.png")
- # Ignore transparent PNG padding; one shared material covers piles, deals and 3D baking.
- var logo_image:Image=textures["back_black"].get_image()
- var logo_bounds:Rect2=Rect2(logo_image.get_used_rect())
- var logo_size:Vector2=Vector2(logo_image.get_size())
- if logo_bounds.has_area():
-  Card.BLACK_BACK_MATERIAL.set_shader_parameter("logo_region",Vector4(logo_bounds.position.x/logo_size.x,logo_bounds.position.y/logo_size.y,logo_bounds.size.x/logo_size.x,logo_bounds.size.y/logo_size.y))
+ textures["back_white"] = load("res://asset/front_logo_white.png")
+ textures["back_black"] = load("res://asset/black_back_logo_red.png")
+ # Measure visible artwork once; share the normalized logo across all back views.
+ for back_key in ["back_white", "back_black"]:
+  var logo_image:Image=textures[back_key].get_image()
+  var logo_bounds:Rect2=Rect2(logo_image.get_used_rect())
+  var logo_size:Vector2=Vector2(logo_image.get_size())
+  var back_material:ShaderMaterial=Card.BACK_MATERIAL if back_key=="back_white" else Card.BLACK_BACK_MATERIAL
+  if logo_bounds.has_area():
+   back_material.set_shader_parameter("logo_region",Vector4(logo_bounds.position.x/logo_size.x,logo_bounds.position.y/logo_size.y,logo_bounds.size.x/logo_size.x,logo_bounds.size.y/logo_size.y))
  var shader := Shader.new()
  shader.code = "shader_type canvas_item; uniform vec4 ink : source_color = vec4(0.08,0.09,0.08,1.0); varying vec4 tint; void vertex(){tint=COLOR;} void fragment(){ vec4 t = texture(TEXTURE,UV); COLOR = vec4(ink.rgb, t.a * ink.a) * tint; }"
  dark_ink = ShaderMaterial.new(); dark_ink.shader = shader; dark_ink.set_shader_parameter("ink", INK)
@@ -179,19 +201,51 @@ func _icon(parent: Node, key: String, pos: Vector2, box: Vector2, white: bool = 
  parent.add_child(icon)
  return icon
 
+var inspector_score: Control
+var table_status: Label
+var camera_keys: Dictionary = {}
+
 func _build_ui() -> void:
+ table_status = _label(stage,"",Vector2(1120,32),Vector2(455,145),21,Color.WHITE)
  _build_card_inspector()
+ hover_direction = DirectionDiagram.new()
+ hover_direction.size = Vector2(176,152)
+ hover_direction.z_index = 160
+ stage.add_child(hover_direction)
+ hover_direction.hide()
+ hover_direction_timer = Timer.new()
+ hover_direction_timer.wait_time = 0.5
+ hover_direction_timer.one_shot = true
+ hover_direction_timer.timeout.connect(_show_hover_direction)
+ add_child(hover_direction_timer)
+ fill_button = _button(stage,"E · 5장 보충",Vector2(34,82),Vector2(170,42))
+ fill_button.tooltip_text = "확인용 기능 · 비용과 횟수 제한은 아직 미정"
+ fill_button.pressed.connect(_fill_requested)
+ shift_button = _button(stage,"Shift · 가림 셔플",Vector2(218,24),Vector2(240,42))
+ shift_button.tooltip_text = "손패의 고유 뒷면을 가리고 섞습니다 · 현재는 정체 공개만 동작"
+ shift_button.pressed.connect(_shift_requested)
+ identity_counter = _panel(stage,Vector2(345,550),Vector2(280,48),Color("181a19"),10)
+ identity_counter.hide()
+ for i in range(2):
+  var symbol := TextureRect.new()
+  symbol.position=Vector2(14+i*140,11);symbol.size=Vector2(26,26)
+  symbol.texture=preload("res://assets/icons/count_king.svg") if i==0 else preload("res://assets/icons/count_joker.svg")
+  symbol.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+  symbol.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+  symbol.mouse_filter=Control.MOUSE_FILTER_IGNORE;identity_counter.add_child(symbol)
+ king_count=_label(identity_counter,"킹 0",Vector2(48,10),Vector2(84,29),20,Color("f6f6f2"))
+ joker_count=_label(identity_counter,"조커 0",Vector2(188,10),Vector2(84,29),20,Color("f6f6f2"))
  menu_button = _button(stage,"← 메인으로",Vector2(34,24),Vector2(170,42))
  menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
  menu_button.pressed.connect(_return_to_main)
 
  end_button = _button(stage,"턴 종료    →",Vector2(1260,552),Vector2(306,53),true)
  end_button.pressed.connect(_end_turn)
- _label(stage,"남은 손패를 버리고 적의 행동 진행",Vector2(1260,617),Vector2(306,23),13,MUTED)
+ _label(stage,"손패를 버리고 상대 배치 · 테이블 유지",Vector2(1260,617),Vector2(306,23),13,MUTED)
 
  hand_label = _label(stage,"HAND  0 / 7",Vector2(354,612),Vector2(220,24),13,MUTED)
- _label(stage,"우클릭 드래그 · 둘러보기   /   R · 시야 중앙",Vector2(580,20),Vector2(490,26),13,MUTED)
- var hand_hint := _label(stage,"우클릭 상세 · 드래그 배치",Vector2(805,612),Vector2(410,24),13,MUTED)
+ _label(stage,"WASD · 이동 / 우클릭 · 둘러보기 / R · 중앙",Vector2(580,20),Vector2(490,26),13,MUTED)
+ hand_hint = _label(stage,"우클릭 상세 · 드래그 배치",Vector2(805,612),Vector2(410,24),13,MUTED)
  hand_hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
  hand_layer = Control.new(); hand_layer.size=Vector2(1600,900); hand_layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
  stage.add_child(hand_layer)
@@ -222,12 +276,12 @@ func _build_ui() -> void:
  reset_button.tooltip_text="같은 시드로 전투 다시 시작"
  reset_button.pressed.connect(_reset_requested)
  var help_button := _button(stage,"?",Vector2(1529,680),Vector2(37,34))
- help_button.pressed.connect(func(): help_panel.visible=not help_panel.visible)
+ help_button.pressed.connect(func(): help_panel.visible=not help_panel.visible;_hide_hover_direction())
  motion_toggle=CheckButton.new(); motion_toggle.text="간결한 연출"; motion_toggle.position=Vector2(1260,737); motion_toggle.size=Vector2(158,36)
  motion_toggle.add_theme_font_size_override("font_size",13)
  motion_toggle.add_theme_color_override("font_color",Color("e0e2e4"))
  motion_toggle.add_theme_color_override("font_hover_color",Color.WHITE)
- motion_toggle.toggled.connect(func(on:bool): reduced_motion=on)
+ motion_toggle.toggled.connect(_set_reduced_motion)
  stage.add_child(motion_toggle)
  performance_label=_label(stage,"F3 · 성능 표시",Vector2(34,873),Vector2(900,20),11,MUTED)
  _label(stage,"UI / DRAW · 임시 전투 규칙",Vector2(1260,873),Vector2(310,20),11,MUTED)
@@ -237,7 +291,7 @@ func _build_ui() -> void:
 
 func _build_pile(pos: Vector2, black: bool) -> void:
  for i in range(3,-1,-1):
-  _panel(stage,pos+Vector2(-i*4,i*4),Vector2(83,115),INK if black else Color.WHITE,9,Color("848b7c") if black else Color("b9c1b0"))
+  _panel(stage,pos+Vector2(-i*4,i*4),Vector2(83,115),INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
  var back := TextureRect.new()
  back.position=pos; back.size=Vector2(83,115)
  back.texture=textures["back_black" if black else "back_white"]
@@ -260,7 +314,7 @@ func _build_overlays() -> void:
  help_panel=_panel(stage,Vector2(420,210),Vector2(760,430),Color("fafbf6"),16,Color("c8cfbd"))
  help_panel.z_index=110; help_panel.mouse_filter=Control.MOUSE_FILTER_STOP
  _label(help_panel,"플레이 안내",Vector2(32,27),Vector2(640,47),28)
- _label(help_panel,"카드 클릭 / 숫자 1–7    선택 · 손패 우클릭    상세 보기\n카드 드래그    테이블 칸에 놓고 사용\n카드 더블클릭 / Enter    빈칸에 자동 배치\n우클릭 드래그    주변 둘러보기 / R    시야 중앙\nSpace    턴 종료         Esc    선택 해제 / 안내 닫기\nF3    FPS · CPU 프레임 · 드로우 콜 표시\n\n드로우 시연 버튼은 애니메이션 확인용입니다.\n시드를 같게 설정하면 카드 순서가 재현됩니다.\n이 버전의 수치와 카드 효과는 임시 테스트 규칙입니다.",Vector2(33,93),Vector2(694,265),19)
+ _label(help_panel,"카드 클릭 / 숫자 1–7    선택 · 손패 우클릭    상세\n더블클릭 / Enter / 드래그    카드 사용\nE    손패 5장 보충 / Shift    가림 셔플\n가린 카드 클릭    정체 공개 (효과·비용 미정)\nWASD    이동 / 우클릭 드래그    둘러보기 / R    중앙\nSpace    턴 종료 / Esc    선택 해제 · 안내 닫기\nF3    FPS · 프레임 · 드로우 콜 표시\n같은 시드는 같은 카드 순서를 재현합니다.\n드로우 시연과 현재 수치는 테스트용입니다.",Vector2(33,93),Vector2(694,265),19)
  var close := _button(help_panel,"닫기",Vector2(579,362),Vector2(148,42),true)
  close.pressed.connect(func():help_panel.hide())
  help_panel.hide()
@@ -275,7 +329,7 @@ func _restart(new_seed: int) -> void:
   view.stop_motion(); view.queue_free()
  views.clear()
  model.reset(new_seed)
- var drawn := model.draw_cards(int(Catalog.CHARACTER.draw))
+ var drawn: Array = model.fill_hand().drawn
  _sync_ui()
  await _animate_draw(drawn)
  busy=false; _sync_ui()
@@ -291,9 +345,9 @@ func _reset_requested() -> void:
 
 func _spawn(entry: Dictionary) -> LyncoCardView:
  var view := Card.new()
- var definition: Dictionary=Catalog.card(entry.id)
+ var definition: Dictionary=Catalog.table_card(entry.id)
  hand_layer.add_child(view)
- view.setup(entry,definition,textures[definition.icon],light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
+ view.setup(entry,definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
  view.chosen.connect(_select_card)
  view.activated.connect(_activate_card)
  view.focus_changed.connect(_focus_card)
@@ -372,6 +426,9 @@ func _animate_draw(drawn: Array) -> void:
 
 func _select_card(uid: int) -> void:
  if inspector_open or busy or model.finished or help_panel.visible:return
+ if model.is_concealed(uid):
+  _activate_card(uid)
+  return
  selected_uid=uid
  for id in views:views[id].set_selected(id==uid)
  _inspect(uid)
@@ -386,23 +443,26 @@ func _focus_card(uid: int, inside: bool) -> void:
   if selected_uid>=0:_inspect(selected_uid)
  else:return
  for view in views.values():view.set_hand_focus(hovered_uid)
+ _schedule_hover_direction()
 
 func _clear_hand_focus() -> void:
+ _hide_hover_direction()
  hovered_uid=-1
  for view in views.values():view.set_hand_focus(-1,false)
 
 func _inspect(uid: int, populate: bool = false) -> void:
  var index:=model.find_card(uid)
  if index<0:return
+ if bool(model.hand[index].get("concealed", false)): return
  inspect_uid=uid
  # Hidden details need only remember the card; populate from live state on open.
  if not populate and not inspector_open:return
- var data: Dictionary=Catalog.card(model.hand[index].id)
+ var data: Dictionary=Catalog.table_card(model.hand[index].id)
  preview_title.text=str(data.name)
  preview_cost.text=str(data.cost)
  preview_cost.tooltip_text="행동력 비용 %d" % int(data.cost)
- preview_kind.text="%s · 대상: %s" % [str(data.kind), "적" if str(data.effect) in ["damage", "link"] else "자신"]
- preview_icon.texture=textures[data.icon]
+ preview_kind.text="%s · 테이블 배치" % str(data.kind)
+ preview_icon.texture=Symbols.texture_for(data, textures.get(data.icon))
  preview_text.text=str(data.detail)
  var reason:=model.unavailable_reason(uid)
  preview_effect.text=model.preview(uid) if reason.is_empty() else reason
@@ -420,9 +480,16 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  busy=true
  _clear_hand_focus()
  selected_uid=-1
- var result:=model.play(uid)
+ var result: Dictionary=model.play(uid)
  if not bool(result.ok):busy=false;_sync_ui();return
  var view: LyncoCardView=views[uid]
+ if bool(result.get("reverse", false)):
+  var revealed := Card.new()
+  var definition: Dictionary = Catalog.back_card(str(result.entry.id))
+  hand_layer.add_child(revealed)
+  revealed.setup(result.entry,definition,Symbols.texture_for(definition),light_ink,textures["back_black"])
+  revealed.position=view.position;revealed.rotation=view.rotation;revealed.scale=view.scale
+  view.stop_motion();view.queue_free();view=revealed
  views.erase(uid); view.stop_motion(); view.locked=true; view.z_index=55
  for other in views.values():other.locked=true
  _sync_ui()
@@ -434,8 +501,13 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  use.tween_property(view,"rotation",0.0,duration)
  use.tween_property(view,"scale",Vector2(0.67,0.67),duration)
  await use.finished
- table.place(str(result.entry.id),cell,reduced_motion)
- if is_attack:
+ table.place(str(result.entry.id),cell,reduced_motion,bool(result.get("reverse",false)))
+ table.mark_owner(cell,"player")
+ if str(result.effect)=="table":
+  _toast("테이블 +%d · %s" % [int(result.score),Catalog.table_effect_text(str(result.entry.id))])
+ elif str(result.effect)=="pending_back":
+  _toast("%s 공개 · 효과와 비용 미정" % str(view.data.name))
+ elif is_attack:
   _toast("피해 %d%s" % [int(result.damage),"  +  연계 피해 %d" % int(result.extra) if int(result.extra)>0 else ""])
  else:
   _toast("%s  ·  %s" % [str(view.data.name),"방어 +7" if str(result.effect)=="guard" else "효과 발동"])
@@ -448,7 +520,6 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
 
 func _end_turn() -> void:
  if inspector_open or looking or busy or drag_uid>=0 or model.finished or help_panel.visible:return
- table.clear_cards()
  busy=true;selected_uid=-1
  _clear_hand_focus()
  _sync_ui()
@@ -465,9 +536,14 @@ func _end_turn() -> void:
   await tween.finished
  for view in views.values():view.queue_free()
  views.clear()
- var result:=model.end_turn()
+ var result: Dictionary=model.end_turn()
+ for record in result.placements:
+  var cell: Vector2i = table.next_cell()
+  table.place(str(record.entry.id),cell,reduced_motion)
+  table.mark_owner(cell,"opponent")
+  await get_tree().create_timer(0.08 if reduced_motion else 0.22).timeout
  _sync_ui()
- _toast("적의 공격  ·  방어 %d / 받은 피해 %d" % [int(result.absorbed),int(result.damage)])
+ _toast("상대 %d장 배치 · 내 차례" % result.placements.size())
  await get_tree().create_timer(0.08 if reduced_motion else 0.20).timeout
  await _animate_draw(result.drawn)
  busy=false;_sync_ui();_check_end()
@@ -482,10 +558,17 @@ func _demo_draw() -> void:
  busy=false;_sync_ui()
 
 func _sync_ui() -> void:
+ if is_instance_valid(table_status):
+  table_status.text = "행동력 %d / 3 · %s\n테이블  나 %d : %d 상대\n배치 %d / 18 · 골드 %d" % [model.energy,"상대·연출 중" if busy else "내 차례",model.player_score,model.opponent_score,model.placed.size(),preload("res://scripts/collection_session.gd").gold]
+ if busy or model.finished: _hide_hover_direction()
  deck_label.text="덱  %d" % model.deck.size()
  discard_label.text="버림  %d" % model.discard.size()
  exhaust_label.text="소멸  %d" % model.exhausted.size()
  hand_label.text="HAND  %d / 7" % model.hand.size()
+ hand_hint.text="가린 카드 클릭 · 뒷면 정체 공개" if model.hand.any(func(entry):return bool(entry.get("concealed",false))) else "우클릭 상세 · 드래그 배치"
+ _sync_identity_counter()
+ fill_button.disabled=busy or model.finished or model.hand.size()>=5
+ shift_button.disabled=busy or model.finished or model.hand.is_empty()
  menu_button.disabled=busy or leaving_battle
  end_button.disabled=busy or model.finished
  end_button.text="연출 진행 중…" if busy else "턴 종료    →"
@@ -501,6 +584,14 @@ func _sync_ui() -> void:
   preview_title.text="손패가 비었습니다";preview_cost.text="—";preview_kind.text="다음 턴에 다시 드로우"
   preview_text.text="턴을 종료해\n새 카드를 뽑으세요.";preview_effect.text=""
 
+func _sync_identity_counter() -> void:
+ # Aggregate hand counts only: never disclose the identity of a hidden slot.
+ identity_counter.visible = not model.finished and (shuffle_phase != "idle" or model.hand.any(func(entry):return bool(entry.get("concealed",false))))
+ if not identity_counter.visible: return
+ var counts: Dictionary = model.identity_counts()
+ king_count.text="킹 %d" % int(counts.king)
+ joker_count.text="조커 %d" % int(counts.joker)
+
 func _toast(message: String) -> void:
  if toast_tween and toast_tween.is_valid():toast_tween.kill()
  toast_label.text=message;toast_label.modulate.a=1.0
@@ -510,8 +601,9 @@ func _toast(message: String) -> void:
 
 func _check_end() -> void:
  if not model.finished:return
- result_title.text="승리" if model.enemy_health==0 else "다시 도전"
- result_body.text="%d턴 · 남은 체력 %d\n시드 %d" % [model.turn,model.health,model.seed_value]
+ var reward: int = model.claim_reward()
+ result_title.text="승리" if model.winner=="player" else ("무승부" if model.winner=="draw" else "패배")
+ result_body.text="테이블 판정  %d : %d\n획득 골드 +%d · 상점에서 덱 해금\n%d턴 · 시드 %d" % [model.player_score,model.opponent_score,reward,model.turn,model.seed_value]
  result_panel.show()
  _sync_ui()
 
@@ -530,6 +622,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
   for view in views.values():view.set_selected(false)
   get_viewport().set_input_as_handled();return
  if inspector_open or looking or busy or drag_uid>=0 or model.finished or help_panel.visible:return
+ if event.keycode==KEY_E:
+  _fill_requested();get_viewport().set_input_as_handled();return
+ if event.keycode==KEY_SHIFT:
+  _shift_requested();get_viewport().set_input_as_handled();return
  if event.keycode==KEY_R:
   table.reset_look();get_viewport().set_input_as_handled();return
  if event.keycode>=KEY_1 and event.keycode<=KEY_7:
@@ -544,6 +640,14 @@ func _update_performance() -> void:
  performance_label.text="%d FPS  ·  엔진 프레임 %.2f ms  ·  드로우 콜 %d  ·  노드 %d" % [Engine.get_frames_per_second(),Performance.get_monitor(Performance.TIME_PROCESS)*1000.0,int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))]
 
 func _process(_delta: float) -> void:
+ if not camera_keys.is_empty():
+  if _hand_action_blocked() or not get_window().has_focus():
+   camera_keys.clear()
+  else:
+   var movement := Vector2(float(camera_keys.has(KEY_D))-float(camera_keys.has(KEY_A)),float(camera_keys.has(KEY_S))-float(camera_keys.has(KEY_W)))
+   table.pan_by(movement,_delta)
+   _hide_hover_direction()
+  if camera_keys.is_empty() and not measure_frames: set_process(false)
  if measure_frames:
   var now:int=Time.get_ticks_usec()
   if last_sample_us>0:frame_samples.append(float(now-last_sample_us)/1000.0)
@@ -571,9 +675,9 @@ func _verify_motion() -> void:
   # Capture both actual back materials, without touching front-face definitions.
   var samples:Array[LyncoCardView]=[]
   for index in range(2):
-   var definition:Dictionary=Catalog.card("guard" if index==0 else "strike")
+   var definition:Dictionary=Catalog.table_card("guard" if index==0 else "strike")
    var sample:=Card.new();stage.add_child(sample)
-   sample.setup({"uid":-100-index},definition,textures[definition.icon],dark_ink if index==0 else light_ink,textures["back_white" if index==0 else "back_black"])
+   sample.setup({"uid":-100-index},definition,Symbols.texture_for(definition, textures.get(definition.icon)),dark_ink if index==0 else light_ink,textures["back_white" if index==0 else "back_black"])
    sample.position=Vector2(550+index*330,320);sample.scale=Vector2(1.5,1.5);sample.z_index=90;sample.locked=true
    sample.set_face_up(false);samples.append(sample)
    assert((sample.back_logo.position+sample.back_logo.size*0.5).is_equal_approx(Card.CARD_SIZE*0.5))
@@ -662,107 +766,45 @@ func _verify_motion() -> void:
  get_tree().quit()
 
 func _verify() -> void:
- # Real renderer smoke test, kept opt-in. Captures UI and frame intervals.
- var output_dir: String=ProjectSettings.globalize_path("res://test-results")
- DirAccess.make_dir_recursive_absolute(output_dir)
- var ignore:=FileAccess.open(output_dir+"/.gdignore",FileAccess.WRITE)
- ignore.close()
+ reduced_motion=true
  await _restart(20260926)
- await get_tree().create_timer(1.0).timeout
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output_dir+"/battle_1440.png")
- # PNG capture is synchronous tooling work, never part of interactive gameplay.
- # Let its frame finish before measuring interaction, using raw wall-clock intervals.
- await get_tree().create_timer(0.5).timeout
- assert(model.conserved())
- var initial_nodes: int=int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
- frame_samples.clear();last_sample_us=0;measure_frames=true;set_process(true)
- # Selection previews, fast repeated activation, draw cap, discard and reshuffle.
- var first_uid:int=int(model.hand[0].uid)
- _select_card(first_uid)
- _activate_card(first_uid)
- _activate_card(first_uid)
- while busy:await get_tree().process_frame
- assert(model.find_card(first_uid)<0)
- assert(model.conserved())
- for _i in range(3):
-  await _demo_draw()
-  assert(model.conserved())
- for _i in range(4):
-  if model.finished:break
-  await _end_turn()
-  assert(model.conserved())
- # Repeated fresh hands exercise every card style and verify there is no node growth.
- for replay in range(16):
-  _test_pointer(Vector2(350,105))
-  await _restart(20260926+replay)
-  # Allow deferred GUI transforms and queued old cards to flush before injecting
-  # an event into newly created controls. Ordinary physical input arrives later.
+ await get_tree().process_frame
+ var baseline: int = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+ for i in range(16):
+  await _restart(20260926)
   await get_tree().process_frame
-  var hover_card:LyncoCardView=views[int(model.hand[0].uid)]
-  _test_pointer(hover_card.rest_position+Card.CARD_SIZE*0.5)
-  await get_tree().create_timer(0.16).timeout
-  if hovered_uid!=int(model.hand[0].uid):
-   push_error("Hover replay %d expected=%d actual=%d busy=%s" % [replay,int(model.hand[0].uid),hovered_uid,str(busy)])
-   get_tree().quit(1)
-   return
-  _test_pointer(Vector2(350,105))
-  await get_tree().create_timer(0.14).timeout
-  for entry in model.hand.duplicate():
-   if model.unavailable_reason(entry.uid).is_empty():
-    await _activate_card(int(entry.uid))
-    assert(model.conserved())
-    break
-  await _end_turn()
-  assert(model.conserved())
- await _restart(20260926)
- await get_tree().create_timer(1.5).timeout
- measure_frames=false;set_process(false)
- var sorted_samples:Array[float]=frame_samples.duplicate();sorted_samples.sort()
- var report:Dictionary={"engine":Engine.get_version_info(),"frames":sorted_samples.size(),"initial_nodes":initial_nodes,"final_nodes":int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),"draw_calls":Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),"engine_process_frame_ms":Performance.get_monitor(Performance.TIME_PROCESS)*1000.0,"renderer":RenderingServer.get_current_rendering_method(),"adapter":RenderingServer.get_video_adapter_name(),"viewport":str(get_viewport_rect().size),"card_conservation":model.conserved(),"replays":16,"static_memory_mb":Performance.get_monitor(Performance.MEMORY_STATIC)/1048576.0}
- if not sorted_samples.is_empty():
-  report["frame_ms_p50"]=sorted_samples[int(sorted_samples.size()*0.5)]
-  report["frame_ms_p95"]=sorted_samples[mini(sorted_samples.size()-1,int(sorted_samples.size()*0.95))]
-  report["frame_ms_max"]=sorted_samples[-1]
-  report["frames_over_33ms"]=sorted_samples.filter(func(value:float):return value>33.34).size()
- assert(int(report.final_nodes)==initial_nodes,"Nodes grew after identical restart")
- # Check both terminal screens and rejection of input after battle completion.
- model.enemy_health=1
- for entry in model.hand.duplicate():
-  if str(Catalog.card(entry.id).effect)=="damage":
-   await _activate_card(int(entry.uid))
-   break
- assert(model.finished and model.enemy_health==0 and result_panel.visible)
- var ended_state:=JSON.stringify([model.hand,model.deck,model.discard,model.health])
- await _end_turn();await _demo_draw()
- assert(ended_state==JSON.stringify([model.hand,model.deck,model.discard,model.health]))
- await _restart(20260926)
- model.health=1
- await _end_turn()
- assert(model.finished and model.health==0 and result_panel.visible)
- report["victory_defeat_ui"]=true
- report["post_battle_input_rejected"]=true
- var file:=FileAccess.open(output_dir+"/renderer_test.json",FileAccess.WRITE)
- file.store_string(JSON.stringify(report,"  "));file.close()
- await _restart(20260926)
- get_window().size=Vector2i(1280,720)
- await get_tree().create_timer(0.3).timeout
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output_dir+"/battle_1280.png")
- print("LYNCO_RENDERER_TEST_PASS "+JSON.stringify(report))
+  assert(model.conserved() and table.cards.is_empty())
+ assert(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==baseline)
+ for i in range(100):
+  if model.finished:break
+  var uid: int = -1
+  for entry in model.hand:
+   if model.unavailable_reason(entry.uid).is_empty():uid=int(entry.uid);break
+  if uid>=0:await _activate_card(uid)
+  else:await _end_turn()
+  assert(model.conserved() and table.cards.size()==model.placed.size())
+ assert(model.finished and result_panel.visible and table.cards.size()==18)
+ var snapshot: String=JSON.stringify([model.hand,model.placed,model.energy])
+ await _end_turn();await _demo_draw();await _fill_requested();await _shift_requested()
+ assert(snapshot==JSON.stringify([model.hand,model.placed,model.energy]))
+ assert(model.claim_reward()==0)
+ print("LYNCO_TABLE_VERIFY_PASS 16_restarts nodes=",baseline,"/",baseline," full_match finished_input_guard reward_once")
  get_tree().quit()
 
 func _prepare_table_cards() -> void:
  # Bake each definition once; all placed instances share its texture/material.
  var pending:Dictionary={}
- for id in Catalog.CARDS.keys()+["back_white","back_black"]:
+ var bake_ids: Array = Catalog.CARDS.keys()
+ for front_id in Catalog.CARDS: bake_ids.append("reverse:" + str(front_id))
+ bake_ids.append_array(["back_white","back_black"])
+ for id in bake_ids:
   var canvas:=SubViewport.new();canvas.size=Vector2i(316,456)
   canvas.transparent_bg=true;canvas.disable_3d=true
   canvas.render_target_update_mode=SubViewport.UPDATE_ONCE
   add_child(canvas)
-  var definition:Dictionary=Catalog.card(("guard" if id=="back_white" else "strike") if str(id).begins_with("back_") else id)
+  var definition:Dictionary=Catalog.back_card(str(id).trim_prefix("reverse:")) if str(id).begins_with("reverse:") else Catalog.table_card(("guard" if id=="back_white" else "strike") if str(id).begins_with("back_") else id)
   var sample:=Card.new();sample.theme=theme;canvas.add_child(sample)
-  sample.setup({"uid":-1},definition,textures[definition.icon],light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
+  sample.setup({"uid":-1},definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
   sample.pivot_offset=Vector2.ZERO;sample.scale=Vector2(2,2);sample.locked=true
   sample.set_face_up(not str(id).begins_with("back_"))
   sample.outline_style.shadow_size=0
@@ -788,10 +830,18 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ if event is InputEventKey:
+  var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+  if key in [KEY_W,KEY_A,KEY_S,KEY_D] and not event.pressed:
+   camera_keys.erase(key)
+   if camera_keys.is_empty() and not measure_frames: set_process(false)
+  elif key in [KEY_W,KEY_A,KEY_S,KEY_D] and not event.echo and is_instance_valid(seed_box) and not _hand_action_blocked():
+   camera_keys[key] = true; set_process(true)
+   _clear_hand_focus(); get_viewport().set_input_as_handled(); return
  if not is_instance_valid(table) or not is_instance_valid(stage):return
  if inspector_open:
   if event is InputEventMouseButton:
-   if event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position))):
+   if event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position))):
     _close_inspector()
    get_viewport().set_input_as_handled();return
   if event is InputEventMouseMotion:
@@ -807,8 +857,11 @@ func _input(event: InputEvent) -> void:
   var point:Vector2=stage.get_global_transform_with_canvas().affine_inverse()*event.position
   var hand_uid:int=_hand_card_at(point)
   if hand_uid>=0:
+   if model.is_concealed(hand_uid):
+    _toast("가려진 카드입니다 · 선택하면 정체가 공개됩니다")
+    get_viewport().set_input_as_handled();return
    _inspect(hand_uid,true)
-   _show_inspector(Catalog.card(model.hand[model.find_card(hand_uid)].id))
+   _show_inspector(Catalog.table_card(model.hand[model.find_card(hand_uid)].id))
    get_viewport().set_input_as_handled();return
   if not Rect2(310,30,940,565).has_point(point):return
   looking=true;look_pointer=get_viewport().get_mouse_position()
@@ -831,7 +884,7 @@ func _input(event: InputEvent) -> void:
    if press_uid<0:
     var cell:Vector2i=table.cell_at(press_point)
     if table.cards.has(cell):
-     _inspect_placed(str(table.cards[cell].get_meta("card_id")))
+     _inspect_placed(str(table.cards[cell].get_meta("card_id")),bool(table.cards[cell].get_meta("reverse",false)))
      get_viewport().set_input_as_handled()
   else:
    press_uid=-1
@@ -846,7 +899,9 @@ func _input(event: InputEvent) -> void:
     if allowed:_activate_card(uid,cell)
     else:_toast(reason if not reason.is_empty() else "빈 테이블 칸에 놓아주세요")
  elif event is InputEventMouseMotion:
-  if press_uid<0 and drag_uid<0:return
+  if press_uid<0 and drag_uid<0:
+   _hover_placed_direction(stage.get_global_transform_with_canvas().affine_inverse()*event.position)
+   return
   var point:Vector2=stage.get_global_transform_with_canvas().affine_inverse()*event.position
   if press_uid>=0 and drag_uid<0 and event.button_mask&MOUSE_BUTTON_MASK_LEFT and point.distance_to(press_point)>8:
    if busy or model.finished or help_panel.visible or not views.has(press_uid):return
@@ -874,6 +929,9 @@ func _cancel_drag() -> void:
 
 func _notification(what: int) -> void:
  if what==NOTIFICATION_APPLICATION_FOCUS_OUT:
+  camera_keys.clear()
+  if not measure_frames: set_process(false)
+  _hide_hover_direction()
   _close_inspector()
   _stop_look(false)
   if drag_uid>=0:_cancel_drag()
@@ -919,11 +977,11 @@ func _verify_table() -> void:
  await get_tree().create_timer(0.2).timeout
  for hand_view in views.values():assert(hand_view.scale.is_equal_approx(Vector2.ONE))
  _test_pointer(end,true)
- assert(preview_kind.text.contains("사용 완료") and inspector_open)
+ assert(preview_kind.text.contains("테이블에 배치됨") and inspector_open)
  _close_inspector()
  # Use an attack via the keyboard/button path, retaining existing combat effects.
  for entry in model.hand.duplicate():
-  if str(Catalog.card(entry.id).effect)=="damage":
+  if str(Catalog.table_card(entry.id).effect)=="damage":
    await _activate_card(entry.uid)
    break
  await get_tree().create_timer(0.3).timeout
@@ -939,7 +997,7 @@ func _verify_table() -> void:
  get_viewport().get_texture().get_image().save_png(output+"/table_scene_1280.png")
  model.energy=0;_sync_ui()
  for entry in model.hand:
-  if int(Catalog.card(entry.id).cost)>0:
+  if int(Catalog.table_card(entry.id).cost)>0:
    view=views[entry.uid]
    initial=JSON.stringify([model.energy,model.hand,model.discard])
    _test_drag(view.rest_position+Card.CARD_SIZE*0.5,resized_point)
@@ -947,10 +1005,10 @@ func _verify_table() -> void:
    assert(initial==JSON.stringify([model.energy,model.hand,model.discard]))
    break
  await _end_turn()
- assert(table.cards.is_empty() and model.conserved())
+ assert(table.cards.size()==model.placed.size() and table.cards.size()>0 and model.conserved())
  await _restart(20260926)
  assert(table.cards.is_empty())
- print("LYNCO_TABLE_TEST_PASS drag_snap occupied_outside_rejected energy_rejected escape_cancel placed_inspector shadow landing resize turn_restart_clear")
+ print("LYNCO_TABLE_TEST_PASS drag_snap occupied_outside_rejected energy_rejected escape_cancel placed_inspector shadow landing resize turn_persists_restart_clear")
  get_tree().quit()
 
 func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
@@ -967,15 +1025,16 @@ func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
  release.position=transform*end;release.global_position=release.position
  get_viewport().push_input(release,true)
 
-func _inspect_placed(id: String) -> void:
+func _inspect_placed(id: String, reverse: bool = false) -> void:
  selected_uid=-1;inspect_uid=-1
  for view in views.values():view.set_selected(false)
- var data:Dictionary=Catalog.card(id)
- preview_title.text=str(data.name);preview_cost.text=str(data.cost)
- preview_icon.texture=textures[data.icon]
- preview_kind.text="%s · 이번 턴 사용 완료" % str(data.kind)
+ var data:Dictionary=Catalog.back_card(id) if reverse else Catalog.table_card(id)
+ preview_cost.tooltip_text="비용 미정" if reverse else "행동력 비용 %d" % int(data.cost)
+ preview_title.text=str(data.name);preview_cost.text=str(data.get("cost_label",data.cost))
+ preview_icon.texture=Symbols.texture_for(data, textures.get(data.icon))
+ preview_kind.text="%s · 정체 공개 / 효과 미정" % str(data.kind) if reverse else "%s · 테이블에 배치됨" % str(data.kind)
  preview_text.text=str(data.detail)
- preview_effect.text="사용 후 소멸됨" if bool(data.get("exhaust",false)) else "사용 후 버림패로 이동함"
+ preview_effect.text="효과·비용·점수 미정" if reverse else "최종 판정까지 테이블에 유지"
  preview_effect.add_theme_color_override("font_color",Color("e0e2e4"))
  _show_inspector(data)
 
@@ -1072,12 +1131,22 @@ func _build_card_inspector() -> void:
  preview_text=_label(inspector_card,"",Vector2(30,358),Vector2(380,152),23)
  preview_text.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  preview_text.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- preview_effect=_label(inspector_card,"",Vector2(24,529),Vector2(392,52),19)
+ preview_effect=_label(inspector_card,"",Vector2(24,529),Vector2(316,52),19)
  preview_effect.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  preview_effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ inspector_score=preload("res://scripts/table_cost_badge.gd").new()
+ inspector_score.position=Vector2(363,527);inspector_score.size=Vector2(54,54)
+ inspector_card.add_child(inspector_score)
  var hint:=_label(inspector_card,"우클릭 · Esc · 바깥 클릭으로 닫기",Vector2(20,587),Vector2(400,24),14)
  hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  hint.name="CloseHint"
+ inspector_demo=_panel(inspector_root,Vector2.ZERO,Vector2(350,386),Color("202322"),18)
+ _label(inspector_demo,"방향 시연",Vector2(24,20),Vector2(302,36),24,Color("f6f6f2"))
+ inspector_diagram=DirectionDiagram.new()
+ inspector_diagram.position=Vector2(35,70);inspector_diagram.size=Vector2(280,242)
+ inspector_demo.add_child(inspector_diagram)
+ direction_note=_label(inspector_demo,"",Vector2(22,326),Vector2(306,46),16,Color("c5c8c1"))
+ direction_note.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  get_viewport().size_changed.connect(_fit_inspector)
  _fit_inspector();inspector_root.hide()
 
@@ -1087,6 +1156,8 @@ func _fit_inspector() -> void:
  var ratio:float=minf(viewport_size.x/1600.0,viewport_size.y/900.0)
  inspector_card.scale=Vector2.ONE*ratio
  inspector_card.position=(viewport_size-inspector_card.size*ratio)*0.5
+ inspector_demo.scale=Vector2.ONE*ratio
+ inspector_demo.position=viewport_size*0.5+Vector2(260,-193)*ratio
 
 func _show_inspector(data: Dictionary) -> void:
  _stop_look();_clear_hand_focus();press_uid=-1;table.hide_preview()
@@ -1096,7 +1167,14 @@ func _show_inspector(data: Dictionary) -> void:
  inspector_card.add_theme_stylebox_override("panel",inspector_styles[dark])
  for label in [preview_title,preview_cost,preview_text]:label.add_theme_color_override("font_color",ink)
  for label in [preview_kind,preview_effect,inspector_card.get_node("CloseHint")]:label.add_theme_color_override("font_color",secondary)
- preview_icon.material=light_ink if dark else dark_ink
+ preview_icon.material=Symbols.material_for(data, light_ink if dark else dark_ink)
+ inspector_diagram.configure(data,reduced_motion)
+ direction_note.text="임시 방향 · 시각적 시연\n전투 효과는 적용하지 않습니다" if not Directions.for_definition(data).is_empty() else "이 카드의 방향은 미정입니다"
+ inspector_score.dark=dark
+ inspector_score.get_child(0).text=str(data.get("table_cost","—"))
+ inspector_score.get_child(0).add_theme_color_override("font_color",ink)
+ inspector_score.get_child(0).add_theme_font_size_override("font_size",23)
+ inspector_score.queue_redraw()
  inspector_open=true;inspector_root.show()
 
 func _close_inspector() -> void:
@@ -1131,7 +1209,7 @@ func _verify_inspector() -> void:
  for dark in [false,true]:
   var uid:int=-1
   for entry in model.hand:
-   if bool(Catalog.card(entry.id).dark)==dark:uid=int(entry.uid);break
+   if bool(Catalog.table_card(entry.id).dark)==dark:uid=int(entry.uid);break
   assert(uid>=0)
   _test_inspect_card(uid)
   assert(inspector_open and not looking and drag_uid<0)
@@ -1179,3 +1257,121 @@ func _return_to_main() -> void:
   leaving_battle = false
   _sync_ui()
   _toast("메인 화면을 열지 못했습니다")
+
+func _hand_action_blocked() -> bool:
+ return inspector_open or looking or busy or drag_uid>=0 or press_uid>=0 or model.finished or help_panel.visible or leaving_battle or seed_box.has_focus()
+
+func _fill_requested() -> void:
+ if _hand_action_blocked(): return
+ busy=true;selected_uid=-1;_sync_ui()
+ var result: Dictionary = model.fill_hand()
+ if not result.drawn.is_empty(): await _animate_draw(result.drawn)
+ busy=false;_sync_ui()
+ _toast(str(result.reason) if not str(result.reason).is_empty() else "손패를 5장으로 보충했습니다")
+
+func _shift_requested() -> void:
+ if _hand_action_blocked() or model.hand.is_empty(): return
+ busy=true;selected_uid=-1;inspect_uid=-1;_clear_hand_focus();table.hide_preview();_sync_ui()
+ shuffle_phase="gather"
+ _sync_identity_counter()
+ # Input is locked for this entire animation; keep one stable view list.
+ var shuffled_views: Array = views.values()
+ var center := Vector2(800,450) - Card.CARD_SIZE * 0.5
+ var gather := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+ for view in shuffled_views:
+  view.stop_motion();view.locked=true;view.set_selected(false)
+  view.conceal(textures["back_black"])
+  view.z_index=90
+  gather.tween_property(view,"position",center,0.10 if reduced_motion else 0.22)
+  gather.tween_property(view,"rotation",0.0,0.16)
+  gather.tween_property(view,"scale",Vector2.ONE,0.16)
+ await gather.finished
+ shuffle_phase="shuffle"
+ for pass_index in range(2):
+  var cut := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
+  var index: int = 0
+  for view in shuffled_views:
+   var side: float = -1.0 if (index+pass_index)%2==0 else 1.0
+   view.z_index=90+(index+pass_index)%shuffled_views.size()
+   cut.tween_property(view,"position",center+Vector2(side*38,side*7),0.06 if reduced_motion else 0.12)
+   index+=1
+  await cut.finished
+ # Hide tracking continuity before seeded reordering and distribution.
+ for view in shuffled_views: view.position=center;view.rotation=0.0
+ model.conceal_and_shuffle()
+ _poses()
+ shuffle_phase="deal"
+ var deal := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+ for i in range(model.hand.size()):
+  var view: LyncoCardView = views[int(model.hand[i].uid)]
+  view.z_index=90+i
+  deal.tween_property(view,"position",view.rest_position,0.1 if reduced_motion else 0.23).set_delay(i*0.025)
+  deal.tween_property(view,"rotation",view.rest_rotation,0.1 if reduced_motion else 0.23).set_delay(i*0.025)
+ await deal.finished
+ for view in shuffled_views: view.locked=false;view.z_index=0
+ shuffle_phase="idle";busy=false;_sync_ui()
+ _toast("가린 카드 클릭 · 뒷면 정체 공개")
+
+
+func _hide_hover_direction() -> void:
+ direction_hover_uid=-1
+ direction_hover_cell=Table.INVALID
+ if is_instance_valid(hover_direction_timer):hover_direction_timer.stop()
+ if hover_direction_tween and hover_direction_tween.is_valid():hover_direction_tween.kill()
+ if is_instance_valid(hover_direction):hover_direction.hide()
+
+func _schedule_hover_direction() -> void:
+ if direction_hover_uid==hovered_uid:return
+ _hide_hover_direction()
+ if hovered_uid<0 or model.is_concealed(hovered_uid):return
+ direction_hover_uid=hovered_uid
+ hover_direction_timer.start()
+
+func _show_hover_direction() -> void:
+ if direction_hover_cell!=Table.INVALID:
+  if busy or inspector_open or looking or model.finished or help_panel.visible or not table.cards.has(direction_hover_cell):
+   _hide_hover_direction()
+   return
+  var holder:Node3D=table.cards[direction_hover_cell]
+  var id:String=str(holder.get_meta("card_id"))
+  var data:Dictionary=Catalog.back_card(id) if bool(holder.get_meta("reverse",false)) else Catalog.table_card(id)
+  if Directions.for_definition(data).is_empty():
+   _hide_hover_direction()
+   return
+  var top:Vector3=table.cell_position(direction_hover_cell)+Vector3(0,0.08,-Table.CARD_METRES.y*0.5)
+  var anchor:Vector2=stage.get_global_transform_with_canvas().affine_inverse()*table.camera.unproject_position(top)
+  _reveal_direction_diagram(data,anchor)
+  return
+ var uid:int=direction_hover_uid
+ if uid<0 or uid!=hovered_uid or not views.has(uid) or busy or inspector_open or looking or drag_uid>=0 or model.finished or help_panel.visible or model.is_concealed(uid):
+  _hide_hover_direction()
+  return
+ var index:int=model.find_card(uid)
+ if index<0:return
+ var view:LyncoCardView=views[uid]
+ _reveal_direction_diagram(Catalog.table_card(model.hand[index].id),view.position+Vector2(Card.CARD_SIZE.x*0.5,-16))
+
+func _reveal_direction_diagram(data: Dictionary, anchor: Vector2) -> void:
+ hover_direction.configure(data,reduced_motion)
+ hover_direction.position=Vector2(clampf(anchor.x-hover_direction.size.x*0.5,8,1592-hover_direction.size.x),maxf(8,anchor.y-hover_direction.size.y-12))
+ hover_direction.modulate.a=0.0
+ hover_direction.show()
+ hover_direction_tween=create_tween()
+ hover_direction_tween.tween_property(hover_direction,"modulate:a",1.0,0.18)
+
+func _hover_placed_direction(point: Vector2) -> void:
+ var cell:Vector2i=table.cell_at(point)
+ if busy or inspector_open or looking or model.finished or help_panel.visible or not table.cards.has(cell):
+  if direction_hover_cell!=Table.INVALID:_hide_hover_direction()
+  return
+ if direction_hover_cell==cell:return
+ _hide_hover_direction()
+ direction_hover_cell=cell
+ hover_direction_timer.start()
+
+
+func _set_reduced_motion(value: bool) -> void:
+ reduced_motion=value
+ hover_direction.set_reduced_motion(value)
+ inspector_diagram.set_reduced_motion(value)
+ table.direction_material.set_shader_parameter("reduced_motion",value)
