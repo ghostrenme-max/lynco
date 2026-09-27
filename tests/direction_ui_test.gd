@@ -101,5 +101,31 @@ func _run() -> void:
  ui.table.clear_cards()
  await process_frame
  check(ui.table.cards.is_empty() and not is_instance_valid(holder),"direction nodes cleaned with cards")
+ check(ui.Directions.OFFSETS.size()==8,"four cardinal and four diagonal endpoints")
+ var definition: Dictionary=ui.Catalog.CARDS.observe.duplicate(true)
+ definition["directions"]=ui.Directions.OFFSETS.keys()
+ check(ui.Directions.for_definition(definition).size()==8,"definitions accept all eight directions")
+ ui.table.place("observe",Vector2i(2,2),true)
+ for offset in ui.Directions.OFFSETS.values():ui.table.place("guard",Vector2i(2,2)+Vector2i(offset),true)
+ await create_timer(0.3).timeout
+ ui.table.selected_cell=Vector2i(2,2)
+ for key in ui.Directions.for_definition(definition):
+  var neighbor: Vector2i=Vector2i(2,2)+Vector2i(ui.Directions.OFFSETS[key])
+  ui.table.influence_range.append(neighbor)
+  ui.table.influenced_cells.append(neighbor)
+ ui.table._show_influence_links()
+ ui.table._refresh_battle_grid()
+ check(ui.table.influence_range.size()==8 and ui.table.influenced_cells.size()==8,"all diagonal neighbors supported")
+ check(ui.table.influence_links.filter(func(link):return link.visible).size()==16,"eight directions on both tables")
+ ui.table.clear_cards()
+ ui.turn_track.wave_clock=0.6
+ ui.turn_track.set_progress(12,30)
+ check(is_equal_approx(ui.turn_track.wave_clock,0.6),"counter changes do not restart five-second wave")
+ await capture("turn_wave_mid")
+ ui.turn_track.wave_clock=4.99
+ ui.turn_track._process(0.02)
+ check(is_equal_approx(ui.turn_track.wave_clock,0.01),"wave repeats after five seconds")
+ ui._set_reduced_motion(true)
+ check(ui.turn_track.reduced_motion,"reduced motion suppresses decorative wave")
  print("LYNCO_DIRECTION_UI_PASS checks=%d delay_fade_cancel hidden_guard center_right_demo resizing animation_pause unchanged_rules yellow_placement magenta_directions cleanup" % checks)
  quit()

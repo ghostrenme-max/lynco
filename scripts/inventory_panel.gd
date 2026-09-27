@@ -14,7 +14,7 @@ var selected_index: int=-1
 var item_buttons: Array[Button]=[]
 
 func label(parent: Node, text: String, pos: Vector2, box: Vector2, font_size: int) -> Label:
- var node:=Label.new();node.text=text;node.position=pos;node.size=box
+ var node:=preload("res://scripts/rolling_number_label.gd").new();node.text=text;node.position=pos;node.size=box
  node.add_theme_font_size_override("font_size",font_size)
  node.add_theme_color_override("font_color",Color("eeeee8"))
  node.mouse_filter=Control.MOUSE_FILTER_IGNORE;parent.add_child(node)

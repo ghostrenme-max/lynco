@@ -29,7 +29,7 @@ func run() -> void:
  ui._test_pointer(t.screen_position(Vector2i(2,1)),true)
  check(t.cards[Vector2i(2,1)].get_node("Direction_right").position.x>0.74,"right tab projects outside card")
  check(t.cards[Vector2i(2,1)].get_node("Direction_up").position.z < -1.07,"up tab projects outside card")
- check(t.influence_links.size()==8,"bounded reusable link pool")
+ check(t.influence_links.size()==16,"bounded eight-direction mirror link pool")
  check(t.influence_links.filter(func(link):return link.visible).size()==4,"two targets on two tables")
  check(not ui.inspector_open and t.selected_cell==Vector2i(2,1),"left click selects instead of inspector")
  check(t.influenced_cells.size()==2 and Vector2i(2,0) in t.influenced_cells and Vector2i(3,1) in t.influenced_cells,"up and right only")

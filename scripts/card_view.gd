@@ -105,7 +105,7 @@ func set_face_up(value: bool) -> void:
  back_logo.visible = not value
 
 func _label(text: String, pos: Vector2, box: Vector2, font_size: int, color: Color) -> Label:
- var label := Label.new()
+ var label := preload("res://scripts/rolling_number_label.gd").new()
  label.text = text; label.position = pos; label.size = box
  label.add_theme_font_size_override("font_size", font_size)
  label.add_theme_color_override("font_color", color)

@@ -166,7 +166,7 @@ func _panel(parent: Node, pos: Vector2, box: Vector2, bg: Color, radius: int = 1
  return panel
 
 func _label(parent: Node, text: String, pos: Vector2, box: Vector2, font_size: int = 18, color: Color = INK) -> Label:
- var label := Label.new(); label.text = text; label.position = pos; label.size = box
+ var label := preload("res://scripts/rolling_number_label.gd").new(); label.text = text; label.position = pos; label.size = box
  label.add_theme_font_size_override("font_size", font_size); label.add_theme_color_override("font_color", color)
  if parent==stage:
   label.add_theme_color_override("font_color",Color("e0e2e4"))
@@ -207,8 +207,6 @@ var table_status: Label
 var garnet_label: Label
 var turn_board: Panel
 var hud_values: Dictionary = {}
-var hud_cache: Dictionary = {}
-var hud_tweens: Dictionary = {}
 var turn_motion: Tween
 var turn_track: Control
 var turn_caption: Label
@@ -629,18 +627,7 @@ func _demo_draw() -> void:
 
 func _set_hud_value(key: String, value: int) -> void:
  var label: Label=hud_values[key]
- var changed: bool=hud_cache.has(key) and int(hud_cache[key])!=value
  label.text=str(value)
- hud_cache[key]=value
- if not changed:return
- if hud_tweens.has(key) and hud_tweens[key].is_valid():hud_tweens[key].kill()
- label.scale=Vector2.ONE;label.modulate=Color.WHITE
- if reduced_motion:return
- label.pivot_offset=label.size*0.5
- label.scale=Vector2.ONE*(0.88 if key=="energy" else 1.16)
- var tween:=create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
- tween.tween_property(label,"scale",Vector2.ONE,0.2)
- hud_tweens[key]=tween
 
 func _sync_ui() -> void:
  if is_instance_valid(table_status):
@@ -1555,14 +1542,15 @@ func _hover_placed_direction(point: Vector2) -> void:
 
 func _set_reduced_motion(value: bool) -> void:
  reduced_motion=value
+ preload("res://scripts/rolling_number_label.gd").reduced_motion=value
+ turn_track.reduced_motion=value
+ turn_track.queue_redraw()
  table.reduced_motion=value
  table.select_influence(Table.INVALID)
  for view in views.values():
   view.reduced_motion=value
   if not view.locked:view.update_pose()
- for key in hud_tweens:
-  if hud_tweens[key].is_valid():hud_tweens[key].kill()
-  hud_values[key].scale=Vector2.ONE
+ for label in get_tree().get_nodes_in_group("rolling_number_labels"):label.finish_rolls()
  if turn_motion and turn_motion.is_valid():turn_motion.kill()
  turn_caption.position=Vector2(28,14)
  hover_direction.set_reduced_motion(value)

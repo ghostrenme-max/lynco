@@ -33,7 +33,7 @@ static func panel(parent: Node, rect: Rect2, color: Color) -> Panel:
  return node
 
 static func label(parent: Node, text: String, rect: Rect2, font_size: int = 20, color: Color = INK) -> Label:
- var node := Label.new()
+ var node := preload("res://scripts/rolling_number_label.gd").new()
  node.text = text
  node.position = rect.position
  node.size = rect.size

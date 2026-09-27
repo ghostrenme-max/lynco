@@ -1,6 +1,14 @@
 extends Control
 var occupied: int = 0
 var capacity: int = 30
+const WAVE_INTERVAL := 5.0
+const WAVE_DURATION := 1.2
+var wave_clock := 0.0
+var reduced_motion := false
+func _process(delta: float) -> void:
+ var was_active: bool=wave_clock<WAVE_DURATION
+ wave_clock=fmod(wave_clock+delta,WAVE_INTERVAL)
+ if not reduced_motion and (was_active or wave_clock<WAVE_DURATION):queue_redraw()
 func set_progress(value: int, maximum: int) -> void:
  occupied=value;capacity=maximum;queue_redraw()
 func _draw() -> void:
@@ -16,3 +24,6 @@ func _draw() -> void:
  var current: Vector2=start.lerp(finish,ratio)
  draw_arc(current,12,0,TAU,48,Color("e8e8de"),2,true)
  draw_arc(current,17,0,TAU,48,Color(0.8,0.82,0.78,0.22),3,true)
+ if not reduced_motion and wave_clock<WAVE_DURATION:
+  var progress: float=wave_clock/WAVE_DURATION
+  draw_arc(current,12.0+16.0*progress,0,TAU,64,Color(0.91,0.92,0.87,0.42*(1.0-progress)),1.5,true)

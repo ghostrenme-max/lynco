@@ -58,10 +58,12 @@ func _draw() -> void:
  var center: Vector2 = size * 0.5
  var reach: float = minf(size.x, size.y) * 0.39
  for key in Directions.OFFSETS:
-  var direction: Vector2 = Directions.OFFSETS[key]
-  draw_line(center, center + direction * reach, Color("535851"), 1.0, true)
+  var direction: Vector2 = Directions.OFFSETS[key].normalized()
+  var endpoint: Vector2=center+direction*reach
+  draw_dashed_line(center,endpoint,Color("636963"),1.0,4.0,true,true)
+  draw_circle(endpoint,3.5,Color("969b96"),true,-1,true)
  for key in directions:
-  var direction: Vector2 = Directions.OFFSETS[key]
+  var direction: Vector2 = Directions.OFFSETS[key].normalized()
   var start: float = 34.0 if direction.y != 0 else 26.0
   for i in range(2):
    var progress: float = fmod(phase + i * 0.5, 1.0)

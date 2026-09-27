@@ -5,7 +5,7 @@ var dark: bool = false
 
 func _ready() -> void:
  mouse_filter = Control.MOUSE_FILTER_IGNORE
- var label := Label.new()
+ var label := preload("res://scripts/rolling_number_label.gd").new()
  label.text = value
  label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
  label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

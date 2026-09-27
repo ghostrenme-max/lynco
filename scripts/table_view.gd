@@ -621,7 +621,7 @@ func _show_influence_links() -> void:
   material.shader=preload("res://asset/card_connection.gdshader")
   var mesh:=PlaneMesh.new()
   mesh.size=Vector2(0.20,0.52)
-  for i in range(8):
+  for i in range(Directions.OFFSETS.size()*2):
    var link:=MeshInstance3D.new()
    link.name="InfluenceLink"+str(i)
    link.mesh=mesh;link.material_override=material
