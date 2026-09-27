@@ -40,7 +40,7 @@ func run() -> void:
  check(ui.model.energy==energy-int(ui.Catalog.card(id).cost)+(1 if id=="cycle" else 0),"cost once")
  var far=table.mirror_cards[Vector2i(2,1)]
  check(far.position.is_equal_approx(table.mirror_position(Vector2i(2,1))),"rotated mirror mapping")
- check(far.get_node("Front").material_override==table.cards[Vector2i(2,1)].get_node("Front").material_override,"shared textures")
+ check(far.get_node("Front").material_override.albedo_texture==table.cards[Vector2i(2,1)].get_node("Front").material_override.albedo_texture,"shared textures")
  table.pan_by(Vector2(1,0),0.1)
  table.look_by(Vector2(6,3))
  var saved_position: Vector3=table.camera.position

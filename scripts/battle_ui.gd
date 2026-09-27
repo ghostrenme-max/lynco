@@ -802,18 +802,21 @@ func _prepare_table_cards() -> void:
  var pending:Dictionary={}
  var bake_ids: Array = Catalog.CARDS.keys()
  for front_id in Catalog.CARDS: bake_ids.append("reverse:" + str(front_id))
+ for front_id in Catalog.CARDS: bake_ids.append("opponent:" + str(front_id))
  bake_ids.append_array(["back_white","back_black"])
  for id in bake_ids:
   var canvas:=SubViewport.new();canvas.size=Vector2i(316,456)
   canvas.transparent_bg=true;canvas.disable_3d=true
   canvas.render_target_update_mode=SubViewport.UPDATE_ONCE
   add_child(canvas)
-  var definition:Dictionary=Catalog.back_card(str(id).trim_prefix("reverse:")) if str(id).begins_with("reverse:") else Catalog.table_card(("guard" if id=="back_white" else "strike") if str(id).begins_with("back_") else id)
+  var definition:Dictionary=Catalog.back_card(str(id).trim_prefix("reverse:")) if str(id).begins_with("reverse:") else Catalog.table_card(("guard" if id=="back_white" else "strike") if str(id).begins_with("back_") else str(id).trim_prefix("opponent:"))
   var sample:=Card.new();sample.theme=theme;canvas.add_child(sample)
   sample.setup({"uid":-1},definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
   sample.pivot_offset=Vector2.ZERO;sample.scale=Vector2(2,2);sample.locked=true
   sample.set_face_up(not str(id).begins_with("back_"))
   sample.outline_style.shadow_size=0
+  if str(id).begins_with("opponent:"):
+   sample.outline_style.bg_color=Color("101211") if bool(definition.dark) else Color("c8cac4")
   pending[id]=canvas
  await RenderingServer.frame_post_draw
  for id in pending:
@@ -890,7 +893,7 @@ func _input(event: InputEvent) -> void:
    if press_uid<0:
     var cell:Vector2i=table.cell_at(press_point)
     if table.cards.has(cell):
-     _inspect_placed(str(table.cards[cell].get_meta("card_id")),bool(table.cards[cell].get_meta("reverse",false)))
+     _inspect_placed(str(table.cards[cell].get_meta("card_id")),bool(table.cards[cell].get_meta("reverse",false)),str(table.cards[cell].get_meta("owner","player")))
      get_viewport().set_input_as_handled()
   else:
    press_uid=-1
@@ -1031,7 +1034,7 @@ func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
  release.position=transform*end;release.global_position=release.position
  get_viewport().push_input(release,true)
 
-func _inspect_placed(id: String, reverse: bool = false) -> void:
+func _inspect_placed(id: String, reverse: bool = false, owner: String = "player") -> void:
  selected_uid=-1;inspect_uid=-1
  for view in views.values():view.set_selected(false)
  var data:Dictionary=Catalog.back_card(id) if reverse else Catalog.table_card(id)
@@ -1039,6 +1042,7 @@ func _inspect_placed(id: String, reverse: bool = false) -> void:
  preview_title.text=str(data.name);preview_cost.text=str(data.get("cost_label",data.cost))
  preview_icon.texture=Symbols.texture_for(data, textures.get(data.icon))
  preview_kind.text="%s · 정체 공개 / 효과 미정" % str(data.kind) if reverse else "%s · 테이블에 배치됨" % str(data.kind)
+ preview_kind.text=("상대 카드 · " if owner=="opponent" else "내 카드 · ")+preview_kind.text
  preview_text.text=str(data.detail)
  preview_effect.text="효과·비용·점수 미정" if reverse else "최종 판정까지 테이블에 유지"
  preview_effect.add_theme_color_override("font_color",Color("e0e2e4"))
@@ -1320,6 +1324,7 @@ func _shift_requested() -> void:
 
 
 func _hide_hover_direction() -> void:
+ if is_instance_valid(table):table.set_hover_card(Table.INVALID)
  direction_hover_uid=-1
  direction_hover_cell=Table.INVALID
  if is_instance_valid(hover_direction_timer):hover_direction_timer.stop()
@@ -1373,6 +1378,7 @@ func _hover_placed_direction(point: Vector2) -> void:
  if direction_hover_cell==cell:return
  _hide_hover_direction()
  direction_hover_cell=cell
+ table.set_hover_card(cell)
  hover_direction_timer.start()
 
 

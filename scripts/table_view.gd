@@ -33,6 +33,12 @@ var preview_cell := INVALID
 var preview_allowed: bool = false
 var card_mesh: PlaneMesh
 var animations: Array[Tween] = []
+const FAR_OPACITY := 0.84
+var far_materials: Dictionary = {}
+var hovered_cell := INVALID
+var owner_line_mesh: PlaneMesh
+var owner_dash_mesh: PlaneMesh
+var owner_line_material: StandardMaterial3D
 
 func _ready() -> void:
  world=$PlacedCards
@@ -50,6 +56,12 @@ func _ready() -> void:
  direction_mesh=PlaneMesh.new();direction_mesh.size=Vector2(0.28,0.34)
  direction_material=ShaderMaterial.new()
  direction_material.shader=preload("res://asset/card_direction.gdshader")
+ owner_line_mesh=PlaneMesh.new();owner_line_mesh.size=Vector2(0.74,0.035)
+ owner_dash_mesh=PlaneMesh.new();owner_dash_mesh.size=Vector2(0.13,0.035)
+ owner_line_material=StandardMaterial3D.new()
+ owner_line_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+ owner_line_material.albedo_color=Color("dddeda")
+ _setup_atmosphere()
  set_process(false)
 
 func set_card_texture(id: String, texture: Texture2D) -> void:
@@ -110,11 +122,13 @@ func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = fals
  assert(free_cell(cell))
  var near := _make_card(id,reverse,quick)
  var far := _make_card(id,reverse,quick)
+ _configure_mirror(far)
  cards[cell]=near; mirror_cards[cell]=far
  _fly(near,cell_position(cell)+Vector3(0,0.65,0),cell_position(cell),Vector3(0.32,0,0),Vector3.ZERO,0.1 if quick else 0.22,0.0)
- _fly(far,cell_position(cell)+Vector3(0,0.1,0),mirror_position(cell),Vector3.ZERO,Vector3(0,PI,0),0.14 if quick else 0.48,0.3 if quick else 2.0)
+ far.position=mirror_position(cell);far.rotation=Vector3(0,PI,0)
 
 func clear_cards() -> void:
+ set_hover_card(INVALID)
  for tween in animations:
   if tween.is_valid():tween.kill()
  animations.clear();set_process(false)
@@ -170,18 +184,40 @@ func mark_owner(cell: Vector2i, owner: String) -> void:
   _label_owner(holder,owner)
 
 func _label_owner(holder: Node3D, owner: String) -> void:
+ var previous: String=str(holder.get_meta("owner","player"))
  holder.set_meta("owner",owner)
+ if previous!=owner:holder.rotation.y+=PI
  if owner=="opponent":
   _ensure_fan()
-  holder.get_node("Back").material_override=opponent_back_material
- var label := Label3D.new()
- label.text = "상대" if owner == "opponent" else "나"
- label.font_size = 44; label.pixel_size = 0.006
- label.position = Vector3(0,0.055,1.0)
- label.rotation_degrees.x = -90
- label.modulate = Color("f0f0ea") if owner == "opponent" else Color("f5d335")
- label.no_depth_test = false
- holder.add_child(label)
+  holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
+  holder.get_node("Front").material_override=_face_material(holder,"opponent:"+str(holder.get_meta("card_id")))
+ var existing:=holder.get_node_or_null("OwnerMark")
+ if existing:
+  holder.remove_child(existing);existing.queue_free()
+ var mark:=Node3D.new();mark.name="OwnerMark";holder.add_child(mark)
+ var inverted: bool=(owner=="opponent") != bool(holder.get_meta("mirror",false))
+ mark.position=Vector3(0,-0.025,-1.17 if inverted else 1.17)
+ var segments: int=4 if owner=="opponent" else 1
+ for i in range(segments):
+  var line:=MeshInstance3D.new()
+  line.mesh=owner_dash_mesh if owner=="opponent" else owner_line_mesh
+  line.material_override=_far_material(owner_line_material) if bool(holder.get_meta("mirror",false)) else owner_line_material
+  line.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  line.position.x=(float(i)-1.5)*0.20 if owner=="opponent" else 0.0
+  mark.add_child(line)
+
+func set_hover_card(cell: Vector2i) -> void:
+ if hovered_cell==cell:return
+ _set_card_brightness(hovered_cell,false)
+ hovered_cell=cell
+ _set_card_brightness(hovered_cell,true)
+
+func _set_card_brightness(cell: Vector2i, highlighted: bool) -> void:
+ if not cards.has(cell) or str(cards[cell].get_meta("owner","player"))!="opponent":return
+ var id: String=str(cards[cell].get_meta("card_id"))
+ var material: Material=materials[id if highlighted else "opponent:"+id]
+ cards[cell].get_node("Front").material_override=material
+ mirror_cards[cell].get_node("Front").material_override=_far_material(material)
 
 # These are render-only counterparts. Only `cards` represents board occupancy.
 const OPPONENT_TABLE_Z: float = -13.8
@@ -217,7 +253,9 @@ func _track(tween: Tween) -> void:
 
 func _flight_pose(t: float, holder: Node3D, start: Vector3, finish: Vector3, start_rotation: Vector3, end_rotation: Vector3, height: float) -> void:
  holder.position=start.lerp(finish,t)+Vector3.UP*sin(PI*t)*height
- holder.rotation=start_rotation.lerp(end_rotation,t)
+ var final_rotation: Vector3=end_rotation
+ if str(holder.get_meta("owner","player"))=="opponent":final_rotation.y+=PI
+ holder.rotation=start_rotation.lerp(final_rotation,t)
 
 func _fly(holder: Node3D, start: Vector3, finish: Vector3, start_rotation: Vector3, end_rotation: Vector3, duration: float, height: float) -> Tween:
  holder.position=start; holder.rotation=start_rotation
@@ -239,7 +277,7 @@ func _ensure_fan() -> void:
   $OpponentHand.add_child(holder)
   holder.get_node("Body").material_override=black_body_material
   holder.get_node("Front").material_override=opponent_back_material
-  holder.get_node("Back").material_override=opponent_back_material
+  holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
   holder.get_node("ContactShadow").hide()
   holder.hide(); opponent_fan.append(holder)
 
@@ -259,14 +297,14 @@ func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int
  var slot: int = maxi(0,floori(float(hand_before-1) / 2.0))
  var source: Node3D = opponent_fan[slot]
  var start: Vector3 = source.global_position
- var start_rotation: Vector3 = source.rotation
  source.hide()
  var near := _make_card(id,false,quick)
  var far := _make_card(id,false,quick)
+ _configure_mirror(far)
  cards[cell]=near; mirror_cards[cell]=far
  far.position=mirror_position(cell); far.rotation.y=PI
  mark_owner(cell,"opponent")
- var flight := _fly(near,start,cell_position(cell),start_rotation,Vector3.ZERO,0.16 if quick else 0.62,0.5 if quick else 2.4)
+ var flight := _slide_opponent(near,start,cell_position(cell),quick)
  await flight.finished
  show_opponent_hand(hand_after)
 
@@ -282,3 +320,61 @@ func set_opponent_view(enabled: bool, quick: bool = false) -> void:
  camera_transition.tween_property(camera,"rotation",opponent_camera_rotation if enabled else saved_player_rotation,0.14 if quick else 0.46)
  await camera_transition.finished
  if not enabled:look_offset=saved_look_offset
+
+func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: bool) -> Tween:
+ holder.position=start
+ holder.rotation=Vector3(0,PI,0)
+ holder.get_node("ContactShadow").hide()
+ holder.get_node("OwnerMark").hide()
+ var tween:=create_tween()
+ # A straight, accelerating insertion with a hard stop; no arc, spin or bounce.
+ tween.tween_property(holder,"position",finish,0.10 if quick else 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+ tween.tween_callback(func():
+  if is_instance_valid(holder):
+   holder.get_node("ContactShadow").show()
+   holder.get_node("OwnerMark").show())
+ tween.tween_interval(0.02 if quick else 0.04)
+ _track(tween)
+ return tween
+
+# Cache distant variants without modifying resources shared by the near table.
+func _far_material(source: StandardMaterial3D) -> StandardMaterial3D:
+ if not far_materials.has(source):
+  var faded: StandardMaterial3D=source.duplicate()
+  faded.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+  faded.albedo_color.a=FAR_OPACITY
+  far_materials[source]=faded
+ return far_materials[source]
+
+func _face_material(holder: Node3D, id: String) -> StandardMaterial3D:
+ return _far_material(materials[id]) if bool(holder.get_meta("mirror",false)) else materials[id]
+
+func _configure_mirror(holder: Node3D) -> void:
+ holder.set_meta("mirror",true)
+ # The opaque paper core would otherwise cancel the translucent face.
+ holder.get_node("Body").hide()
+ holder.get_node("ContactShadow").hide()
+ for face in ["Front","Back"]:
+  var mesh: MeshInstance3D=holder.get_node(face)
+  mesh.material_override=_far_material(mesh.material_override)
+ for child in holder.get_children():
+  if str(child.name).begins_with("Direction_"):
+   var faded: ShaderMaterial=direction_material.duplicate()
+   faded.set_shader_parameter("opacity",FAR_OPACITY)
+   child.material_override=faded
+
+func _setup_atmosphere() -> void:
+ for child in $OpponentTable.get_children():
+  if child is MeshInstance3D:
+   child.material_override=_far_material(child.mesh.surface_get_material(0))
+ var gap:=MeshInstance3D.new()
+ gap.name="BetweenTablesShade"
+ var plane:=PlaneMesh.new()
+ plane.size=Vector2(24.0,3.4)
+ gap.mesh=plane
+ var shade:=ShaderMaterial.new()
+ shade.shader=preload("res://asset/table_gap.gdshader")
+ gap.material_override=shade
+ gap.position=Vector3(0,-0.16,OPPONENT_TABLE_Z*0.5)
+ gap.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ add_child(gap)
