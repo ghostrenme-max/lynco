@@ -1,13 +1,13 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://dy2hvpc175k5m"]
 
-[ext_resource type="Script" path="res://scripts/battle_ui.gd" id="UI"]
 [ext_resource type="PackedScene" path="res://scenes/table_world.tscn" id="Table"]
+[ext_resource type="Script" uid="uid://b8gwnh7fjw555" path="res://scripts/battle_ui.gd" id="UI"]
 
-[node name="LYNCO" type="Node3D"]
+[node name="LYNCO" type="Node3D" unique_id=1051148952]
 
-[node name="TableWorld" parent="." instance=ExtResource("Table")]
+[node name="TableWorld" parent="." unique_id=626219016 instance=ExtResource("Table")]
 
-[node name="Interface" type="Control" parent="."]
+[node name="Interface" type="Control" parent="." unique_id=423690512]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
