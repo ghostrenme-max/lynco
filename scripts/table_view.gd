@@ -39,8 +39,9 @@ var hovered_cell := INVALID
 var owner_line_mesh: PlaneMesh
 var owner_dash_mesh: PlaneMesh
 var owner_line_material: StandardMaterial3D
-var owner_plate_mesh: PlaneMesh
-var owner_plate_materials: Dictionary = {}
+var battle_grid: MeshInstance3D
+var mirror_grid: MeshInstance3D
+var battle_grid_material: ShaderMaterial
 
 func _ready() -> void:
  world=$PlacedCards
@@ -63,12 +64,7 @@ func _ready() -> void:
  owner_line_material=StandardMaterial3D.new()
  owner_line_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
  owner_line_material.albedo_color=Color("dddeda")
- owner_plate_mesh=PlaneMesh.new();owner_plate_mesh.size=Vector2(1.64,2.30)
- for owner in ["player","opponent"]:
-  var plate_material:=ShaderMaterial.new()
-  plate_material.shader=preload("res://asset/card_owner_plate.gdshader")
-  plate_material.set_shader_parameter("opponent",owner=="opponent")
-  owner_plate_materials[owner]=plate_material
+ _setup_battle_grid()
  get_viewport().size_changed.connect(_fit_top_view)
  _setup_atmosphere()
  _setup_garnet_cubes()
@@ -122,11 +118,13 @@ func preview(local_point: Vector2, usable: bool) -> Vector2i:
   hint_material.set_shader_parameter("tint",Color(1.0,0.84,0.26,1.0) if allowed else Color(0.55,0.57,0.59,0.35))
  preview_cell=cell;preview_allowed=allowed
  if not hint.visible:hint.show()
+ _refresh_battle_grid()
  return cell
 
 func hide_preview() -> void:
  if hint.visible:hint.hide()
  preview_cell=INVALID
+ _refresh_battle_grid()
 
 func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = false) -> void:
  assert(free_cell(cell))
@@ -136,6 +134,7 @@ func place(id: String, cell: Vector2i, quick: bool = false, reverse: bool = fals
  cards[cell]=near; mirror_cards[cell]=far
  _fly(near,cell_position(cell)+Vector3(0,0.65,0),cell_position(cell),Vector3(0.32,0,0),Vector3.ZERO,0.1 if quick else 0.22,0.0)
  far.position=mirror_position(cell);far.rotation=Vector3(0,PI,0)
+ _refresh_battle_grid()
 
 func clear_cards() -> void:
  select_influence(INVALID)
@@ -148,6 +147,7 @@ func clear_cards() -> void:
  for holder in mirror_cards.values():holder.queue_free()
  mirror_cards.clear()
  for holder in opponent_fan:holder.hide()
+ _refresh_battle_grid()
 
 func set_back_texture(id: String, texture: Texture2D) -> void:
  var material:=StandardMaterial3D.new()
@@ -194,6 +194,7 @@ func mark_owner(cell: Vector2i, owner: String) -> void:
  if not cards.has(cell): return
  for holder in [cards[cell],mirror_cards[cell]]:
   _label_owner(holder,owner)
+ _refresh_battle_grid()
 
 func _label_owner(holder: Node3D, owner: String) -> void:
  var previous: String=str(holder.get_meta("owner","player"))
@@ -203,13 +204,6 @@ func _label_owner(holder: Node3D, owner: String) -> void:
   _ensure_fan()
   holder.get_node("Back").material_override=_far_material(opponent_back_material) if bool(holder.get_meta("mirror",false)) else opponent_back_material
   holder.get_node("Front").material_override=_face_material(holder,"opponent:"+str(holder.get_meta("card_id")))
- var plate: MeshInstance3D=holder.get_node_or_null("OwnerPlate")
- if plate==null:
-  plate=MeshInstance3D.new();plate.name="OwnerPlate";plate.mesh=owner_plate_mesh
-  plate.position.y=0.003
-  plate.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-  holder.add_child(plate)
- plate.material_override=owner_plate_materials[owner]
  var existing:=holder.get_node_or_null("OwnerMark")
  if existing:
   holder.remove_child(existing);existing.queue_free()
@@ -348,7 +342,6 @@ func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: boo
  holder.rotation=Vector3(0,PI,0)
  holder.get_node("ContactShadow").hide()
  holder.get_node("OwnerMark").hide()
- holder.get_node("OwnerPlate").hide()
  _set_card_directions_visible(holder,false)
  var tween:=create_tween()
  # A straight, accelerating insertion with a hard stop; no arc, spin or bounce.
@@ -357,7 +350,6 @@ func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: boo
   if is_instance_valid(holder):
    holder.get_node("ContactShadow").show()
    holder.get_node("OwnerMark").show()
-   holder.get_node("OwnerPlate").show()
    _set_card_directions_visible(holder,true))
  tween.tween_interval(0.02 if quick else 0.04)
  _track(tween)
@@ -481,6 +473,7 @@ func set_top_view(enabled: bool) -> void:
    if is_instance_valid(node):node.visible=top_hidden[node]
   top_hidden.clear()
  top_view=enabled
+ _refresh_battle_grid()
  hide_preview()
  if enabled:_fit_top_view()
  else:
@@ -607,3 +600,29 @@ func _setup_garnet_cubes() -> void:
 func _set_card_directions_visible(holder: Node3D, enabled: bool) -> void:
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):child.visible=enabled
+
+func _setup_battle_grid() -> void:
+ var mesh:=PlaneMesh.new();mesh.size=Vector2(STEP.x*COLS,STEP.y*ROWS)
+ battle_grid_material=ShaderMaterial.new()
+ battle_grid_material.shader=preload("res://asset/battle_grid.gdshader")
+ battle_grid=MeshInstance3D.new()
+ battle_grid.name="BattleGrid";battle_grid.mesh=mesh;battle_grid.material_override=battle_grid_material
+ battle_grid.position=Vector3(0,0.008,-1.3)
+ battle_grid.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ add_child(battle_grid);battle_grid.hide()
+ mirror_grid=MeshInstance3D.new()
+ mirror_grid.name="MirrorGrid";mirror_grid.mesh=mesh;mirror_grid.material_override=battle_grid_material
+ mirror_grid.position=Vector3(0,0.008,OPPONENT_TABLE_Z+1.3);mirror_grid.rotation.y=PI
+ mirror_grid.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ add_child(mirror_grid);mirror_grid.hide()
+
+func _refresh_battle_grid() -> void:
+ if not is_instance_valid(battle_grid):return
+ var opponent_mask: int=0
+ for cell in cards:
+  if str(cards[cell].get_meta("owner","player"))=="opponent":
+   opponent_mask |= 1 << (cell.y*COLS+cell.x)
+ battle_grid_material.set_shader_parameter("opponent_mask",opponent_mask)
+ var active: bool=not cards.is_empty() or preview_cell!=INVALID
+ battle_grid.visible=active
+ mirror_grid.visible=active and not top_view

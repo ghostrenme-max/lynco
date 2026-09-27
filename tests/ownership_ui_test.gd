@@ -13,6 +13,11 @@ func run() -> void:
  change_scene_to_file("res://scenes/battle.tscn");await scene_changed
  ui=current_scene.get_node("Interface")
  while ui.busy or ui.views.is_empty():await process_frame
+ check(not ui.table.battle_grid.visible and not ui.table.mirror_grid.visible,"idle table has no grid")
+ ui.table.preview(ui.table.screen_position(Vector2i(2,1)),true)
+ check(ui.table.battle_grid.visible,"placement preview reveals grid")
+ ui.table.hide_preview()
+ check(not ui.table.battle_grid.visible,"empty preview exit hides grid")
  ui.reduced_motion=true
  await ui._activate_card(ui.model.hand[0].uid,Vector2i(2,1))
  await ui._end_turn()
@@ -26,7 +31,7 @@ func run() -> void:
   check(is_equal_approx(wrapf(holder.rotation.y,0,TAU),PI if enemy else 0.0),"near owner orientation")
   check(is_equal_approx(wrapf(table.mirror_cards[cell].rotation.y,0,TAU),0.0 if enemy else PI),"mirror owner orientation")
   check(holder.get_node("OwnerMark").global_position.z>holder.global_position.z,"mark visible below both orientations")
-  check(holder.get_node("OwnerPlate").material_override.get_shader_parameter("opponent")==enemy,"owner frame independent of card face color")
+  check(not holder.has_node("OwnerPlate"),"old owner frames removed")
   check(holder.get_node("OwnerMark").get_child_count()==(4 if enemy else 1),"dashed or solid mark")
   check(holder.get_node("Front").material_override.albedo_texture==table.mirror_cards[cell].get_node("Front").material_override.albedo_texture,"mirror material shared")
   if enemy and not ui.Catalog.card(holder.get_meta("card_id")).dark:enemy_cell=cell
@@ -38,6 +43,14 @@ func run() -> void:
  for cell in table.mirror_cards:
   check(is_equal_approx(table.mirror_cards[cell].get_node("Front").material_override.albedo_color.a,0.84),"far cards translucent")
   check(table.cards[cell].get_node("Front").material_override.albedo_color.a==1.0,"near cards remain opaque")
+ var expected_mask:=0
+ for cell in table.cards:
+  if table.cards[cell].get_meta("owner")=="opponent":expected_mask |= 1 << (cell.y*table.COLS+cell.x)
+ check(table.battle_grid_material.get_shader_parameter("opponent_mask")==expected_mask,"red cells match opponent occupancy")
+ check(table.battle_grid.material_override==table.mirror_grid.material_override,"mirror grid shares logical occupancy")
+ table.set_top_view(true)
+ check(table.battle_grid.visible and not table.mirror_grid.visible,"top view grid without mirror")
+ table.set_top_view(false)
  var id: String=table.cards[enemy_cell].get_meta("card_id")
  var normal: StandardMaterial3D=table.materials[id]
  var dim: StandardMaterial3D=table.materials["opponent:"+id]
@@ -90,7 +103,7 @@ func run() -> void:
  var slide: Tween=table._slide_opponent(holder,start,finish,false)
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(not child.visible,"directions hidden while opponent card flies")
- check(not holder.get_node("OwnerPlate").visible,"owner frame hidden during delivery")
+ check(table.battle_grid.visible,"grid visible during delivery")
  var samples:=0
  while slide.is_running():
   check((holder.position-start).cross(finish-start).length()<0.0001,"strict straight path")
@@ -98,7 +111,7 @@ func run() -> void:
   samples+=1
   await process_frame
  check(samples>3 and holder.position.is_equal_approx(finish),"fast insertion reaches target")
- check(holder.get_node("OwnerPlate").visible,"owner frame revealed at landing")
+ check(table.battle_grid.visible,"grid remains after landing")
  check(holder.get_node("ContactShadow").visible and holder.get_node("OwnerMark").visible,"contact feedback at stop")
  for child in holder.get_children():
   if str(child.name).begins_with("Direction_"):check(child.visible,"directions appear after landing")
@@ -108,5 +121,6 @@ func run() -> void:
  check(table.animations.size()==1,"only own local landing is animated")
  await ui._restart(20260926)
  check(table.hovered_cell==table.INVALID and table.cards.is_empty() and table.mirror_cards.is_empty(),"reset cleanup")
+ check(not table.battle_grid.visible and not table.mirror_grid.visible,"restart hides empty grid")
  print("OWNERSHIP_UI_PASS checks=",checks," protected_ink_pixels=",protected_pixels)
  quit()
