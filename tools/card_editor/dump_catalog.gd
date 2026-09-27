@@ -14,5 +14,8 @@ func _initialize() -> void:
  var output:=FileAccess.open("res://tools/card_editor/default_cards.json",FileAccess.WRITE)
  output.store_string(JSON.stringify({"schema_version":1,"cards":records},"  "))
  output.close()
+ var decks:=FileAccess.open("res://tools/card_editor/decks.json",FileAccess.WRITE)
+ decks.store_string(JSON.stringify(load("res://scripts/collection_session.gd").DECKS,"  "))
+ decks.close()
  print("EDITOR_CATALOG_EXPORTED ",records.size())
  quit()
