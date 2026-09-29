@@ -8,7 +8,7 @@ const UI = preload("res://scripts/screen_style.gd")
 const Inspector = preload("res://scripts/card_inspector.gd")
 const Notification = preload("res://scripts/notification_popup.gd")
 
-const Model = preload("res://scripts/table_battle_model.gd")
+const Model = preload("res://scripts/linked_battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Card = preload("res://scripts/card_view.gd")
 const Table = preload("res://scripts/table_view.gd")
@@ -36,6 +36,7 @@ const FAN_TIME: float = 0.23
 const FAN_GAP: float = 0.040
 
 var model := Model.new()
+var linked_panel: Panel
 var table: LyncoTableView
 var drag_uid: int = -1
 var press_uid: int = -1
@@ -149,6 +150,7 @@ func _ready() -> void:
  table.placement_camera.ui=self
  add_child(table.placement_camera)
  _build_ui()
+ linked_panel=preload("res://scripts/linked_battle_panel.gd").new();stage.add_child(linked_panel);linked_panel.setup(self)
  resized.connect(_fit_stage)
  _fit_stage()
  set_process(false)
@@ -256,7 +258,7 @@ func _build_ui() -> void:
  garnet_icon.polygon=hex_points
  garnet_icon.color=Color("303733");stage.add_child(garnet_icon)
  garnet_label=_label(stage,"0",Vector2(89,25),Vector2(180,45),30,Color("252c28"))
- garnet_label.tooltip_text="큐브 가넷 · 현재 보유 재화"
+ garnet_label.tooltip_text="골드 · 상점 전용 재화 (전투 큐브와 별개)"
  _panel(stage,Vector2(37,91),Vector2(29,42),Color("303733"),3)
  _build_card_inspector()
  hover_direction = DirectionDiagram.new()
@@ -422,7 +424,7 @@ func _restart(new_seed: int) -> void:
  _sync_ui()
  await _animate_draw(drawn)
  busy=false; _sync_ui()
- _toast("카드를 선택해 전투를 시작하세요")
+ _toast("편집 규칙 오류 · 기본값 사용: "+Model.Rules.load_error if not Model.Rules.load_error.is_empty() else "카드를 선택해 전투를 시작하세요")
 
 func _reset_requested() -> void:
  if busy or drag_uid>=0: return
@@ -578,7 +580,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  busy=true
  _clear_hand_focus()
  selected_uid=-1
- var result: Dictionary=model.play(uid)
+ var result: Dictionary=model.play_at(uid,cell)
  if not bool(result.ok):busy=false;_sync_ui();return
  var view: LyncoCardView=views[uid]
  if bool(result.get("reverse", false)):
@@ -603,7 +605,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  table.place(str(result.entry.id),cell,reduced_motion,bool(result.get("reverse",false)))
  table.mark_owner(cell,"player")
  if str(result.effect)=="table":
-  _toast("테이블 +%d · %s" % [int(result.score),Catalog.table_effect_text(str(result.entry.id))])
+  _toast("%s · 연결 %d회" % [Model.Rules.effect_text(model.definitions[result.entry.id].base_effect,int(model.definitions[result.entry.id].base_value)),result.events.filter(func(e):return e.cause=="link").size()])
  elif str(result.effect)=="pending_back":
   _toast("%s 공개 · 효과와 비용 미정" % str(view.data.name))
  elif is_attack:
@@ -641,7 +643,7 @@ func _end_turn() -> void:
  _set_piles_retracted(true)
  await table.set_opponent_view(true,reduced_motion)
  for record in result.placements:
-  var cell: Vector2i = table.next_cell()
+  var cell: Vector2i = record.cell
   _toast("상대 · %s" % str(Catalog.card(record.entry.id).name))
   await table.play_opponent(str(record.entry.id),cell,int(record.hand_before),int(record.hand_after),reduced_motion)
  table.show_opponent_hand(0)
@@ -668,6 +670,8 @@ func _set_hud_value(key: String, value: int) -> void:
  label.text=("%02d" % value) if key=="energy" else str(value)
 
 func _sync_ui() -> void:
+ _sync_investment_markers()
+ if is_instance_valid(linked_panel):linked_panel.refresh()
  if is_instance_valid(table_status):
   _set_hud_value("energy",model.energy)
   _set_hud_value("player_score",model.player_score)
@@ -724,7 +728,7 @@ func _check_end() -> void:
  if not model.finished:return
  var reward: int = model.claim_reward()
  result_title.text="승리" if model.winner=="player" else ("무승부" if model.winner=="draw" else "패배")
- result_body.text="테이블 판정  %d : %d\n획득 골드 +%d · 상점에서 덱 해금\n%d턴 · 시드 %d" % [model.player_score,model.opponent_score,reward,model.turn,model.seed_value]
+ result_body.text="종합 %d : %d · %s\n큐브 %d:%d ×%d + 성과 %d:%d ×%d\n획득 골드 +%d · 투자금 정산 %d%%" % [model.player_score,model.opponent_score,model.ending_reason,model.cubes.player,model.cubes.opponent,model.rules.cube_weight,model.performance.player,model.performance.opponent,model.rules.score_weight,reward,model.rules.final_invested_percent]
  notification.clear()
  result_panel.show()
  _sync_ui()
@@ -935,6 +939,10 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ if event is InputEventMouse and not inspector_open and not help_panel.visible and not is_instance_valid(inventory_layer) and is_instance_valid(linked_panel) and linked_panel.is_visible_in_tree() and linked_panel.get_global_rect().has_point(event.position):
+  if event is InputEventMouseButton and not event.pressed and drag_uid>=0:
+   _cancel_drag()
+  return
  if get_node("/root/WindowControls").handle_shortcut(event):return
  if event is InputEventKey and event.pressed and not event.echo:
   if event.physical_keycode==KEY_KP_0 or event.keycode==KEY_KP_0:
@@ -1335,7 +1343,7 @@ func _show_inspector(data: Dictionary) -> void:
  inspector_open=true
 
 func _toggle_inspector_face() -> void:
- if not Catalog.CARDS.has(inspector_source_id):return
+ if inspector_source_id not in Catalog.runtime_ids():return
  inspector_reverse=not inspector_reverse
  var data: Dictionary=Catalog.back_card(inspector_source_id) if inspector_reverse else Catalog.table_card(inspector_source_id)
  preview_title.text=str(data.name)
@@ -1605,3 +1613,25 @@ func _toggle_inventory() -> void:
  var inventory:=preload("res://scripts/inventory_panel.gd").new()
  inventory.theme=theme
  inventory_layer.add_child(inventory)
+
+func _linked_action(reclaim: bool) -> void:
+ if busy or model.finished or inspector_open or help_panel.visible or is_instance_valid(inventory_layer) or drag_uid>=0:return
+ var cell: Vector2i=table.selected_cell
+ busy=true
+ var result: Dictionary=model.recover(cell) if reclaim else model.invest(cell)
+ if result.ok:await _animate_draw(result.drawn)
+ _toast(result.reason)
+ busy=false;_sync_ui()
+ table.refresh_link_rules()
+
+func _sync_investment_markers() -> void:
+ if not is_instance_valid(table):return
+ for cell in table.cards:
+  if not model.cell_map.has(cell):continue
+  var record: Dictionary=model.cell_map[cell]
+  for holder in [table.cards[cell],table.mirror_cards[cell]]:
+   var marker: Label3D=holder.get_node_or_null("InvestmentLabel")
+   if marker==null:
+    marker=Label3D.new();marker.name="InvestmentLabel";marker.position=Vector3(0,0.18,1.15);marker.rotation_degrees.x=-90
+    marker.font_size=28;marker.pixel_size=0.008;marker.modulate=Color("b582eb");marker.outline_size=5;holder.add_child(marker)
+   marker.text="◆".repeat(int(record.invested));marker.visible=int(record.invested)>0

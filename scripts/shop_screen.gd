@@ -23,7 +23,8 @@ func _ready() -> void:
  UI.label(stage,"덱 전체를 해금하고 다음 대전에서 사용하세요.",Rect2(80,196,1300,35),23,UI.MUTED)
  var i := 0
  for id in Session.DECKS:
-  var data: Dictionary = Session.DECKS[id]
+  var data: Dictionary = Session.DECKS[id].duplicate(true)
+  data.cards=Session.deck_cards(id)
   var panel := UI.panel(stage,Rect2(80+i*735,275,705,410),Color.WHITE)
   UI.label(panel,str(data.name),Rect2(30,26,645,48),30)
   UI.label(panel,"덱 주인 · %s   /   %d장" % [data.owner,data.cards.size()],Rect2(30,86,645,36),22,UI.MUTED)

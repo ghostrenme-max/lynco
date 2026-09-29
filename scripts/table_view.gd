@@ -524,11 +524,11 @@ func _add_influence_overlay(holder: Node3D) -> void:
  overlay.hide()
  holder.add_child(overlay)
 
-func select_influence(cell: Vector2i) -> void:
- restore_card_focus()
+func select_influence(cell: Vector2i, refresh_only: bool=false) -> void:
+ if not refresh_only:restore_card_focus()
  if influence_tween and influence_tween.is_valid():influence_tween.kill()
  for link in influence_links:link.hide()
- selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
+ if not refresh_only:selected_cell=cell if cards.has(cell) and selected_cell!=cell else INVALID
  influenced_cells.clear()
  influence_range.clear()
  if cards.has(selected_cell):
@@ -539,7 +539,7 @@ func select_influence(cell: Vector2i) -> void:
    var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])
    if target.x>=0 and target.x<COLS and target.y>=0 and target.y<ROWS:
     influence_range.append(target)
-   if cards.has(target):influenced_cells.append(target)
+   if cards.has(target) and _real_link_allowed(selected_cell,target):influenced_cells.append(target)
  for placed_cell in cards:
   for holder in [cards[placed_cell],mirror_cards[placed_cell]]:
    var overlay: MeshInstance3D=holder.get_node("InfluenceOverlay")
@@ -703,3 +703,15 @@ func set_black_market_open(enabled: bool) -> void:
  black_market_open=enabled
  black_market_glow.albedo_color=Color("ff263b") if enabled else Color("181a19")
  $Distributors/BlackMarket/ActiveLight.visible=enabled
+
+func _real_link_allowed(source_cell: Vector2i, target_cell: Vector2i) -> bool:
+ var ui=ui_stage.get_parent()
+ if not "model" in ui or not ui.model.has_method("edge_allowed"):return true
+ var m=ui.model
+ if not m.cell_map.has(source_cell) or not m.cell_map.has(target_cell):return false
+ var source: Dictionary=m.cell_map[source_cell]
+ var trigger: String=m.definitions[source.entry.id].link_trigger
+ return m.edge_allowed(source,m.cell_map[target_cell],"on_place" if trigger=="any" else trigger)
+
+func refresh_link_rules() -> void:
+ if selected_cell!=INVALID:select_influence(selected_cell,true)

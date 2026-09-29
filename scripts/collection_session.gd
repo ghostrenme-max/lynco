@@ -24,7 +24,7 @@ static func equip(id: String) -> bool:
  return true
 
 static func selected_cards() -> Array:
- return DECKS[selected].cards.duplicate()
+ return deck_cards(selected)
 
 # UI preview fixtures only; these items have no gameplay effects or prices.
 static func add_preview_items() -> void:
@@ -41,3 +41,6 @@ static func add_preview_items() -> void:
    "icon":"res://assets/icons/"+icons[i]+".png",
    "temporary":true,
   })
+
+static func deck_cards(id: String) -> Array:
+ return preload("res://scripts/linked_rules.gd").deck_ids(id)

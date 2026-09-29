@@ -25,7 +25,7 @@ func stop_pulse() -> void:
 func replay_count(target: String, quick: bool = false) -> void:
  stop_pulse()
  value=target
- tooltip_text="가치 미정" if not target.is_valid_int() or int(target)<0 else "큐브 %s개" % target
+ tooltip_text="투자 비용 미정" if not target.is_valid_int() or int(target)<0 else "투자 비용 · 큐브 %s개" % target
  queue_redraw()
  var count:=cube_count()
  revealed_count=0

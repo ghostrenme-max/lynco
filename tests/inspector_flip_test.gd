@@ -22,7 +22,7 @@ func run() -> void:
   ui._test_inspect_card(int(entry.uid))
   var front: String=ui.preview_text.text
   check(ui.inspector_comparison.visible,"front shows comparison")
-  check(ui.comparison_effects[0].text==ui.Catalog.table_effect_text(entry.id),"front effect comparison")
+  check(ui.comparison_effects[0].text==ui.Catalog.table_card(entry.id).rule_detail,"front executable conditions comparison")
   check(ui.comparison_effects[1].self_modulate.a<=0.11 and ui.comparison_titles[1].self_modulate.a<=0.11,"inactive text nearly transparent")
   for band in ui.comparison_bands:
    var style: StyleBoxFlat=band.get_theme_stylebox("panel")

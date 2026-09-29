@@ -106,7 +106,8 @@ func present(data: Dictionary, source_id: String, reverse: bool, reduced_motion:
  for label in [preview_kind,preview_effect,inspector_card.get_node("CloseHint")]:label.add_theme_color_override("font_color",secondary)
  preview_icon.material=Symbols.material_for(data, light_ink if dark else dark_ink)
  inspector_diagram.configure(data,reduced_motion)
- direction_note.text="임시 방향 · 시각적 시연\n전투 효과는 적용하지 않습니다" if not Directions.for_definition(data).is_empty() else "이 카드의 방향은 미정입니다"
+ direction_note.text="출발 카드 방향 → 대상 주인\n발동 조건은 왼쪽에서 확인" if not Directions.for_definition(data).is_empty() else "이 카드에는 연결 방향이 없습니다"
+ preview_text.tooltip_text=str(data.get("memo",""))
  inspector_score.dark=dark
  inspector_score.replay_count(str(data.get("table_cost","—")),reduced_motion)
  var title_font: Font=preview_title.get_theme_font("font")
@@ -118,7 +119,7 @@ func present(data: Dictionary, source_id: String, reverse: bool, reduced_motion:
 
 func _refresh_inspector_comparison(data: Dictionary, source_id: String, reverse: bool) -> void:
  inspector_comparison.visible=str(data.get("identity","normal")) not in ["king","joker"]
- if not inspector_comparison.visible or not Catalog.CARDS.has(source_id):return
+ if not inspector_comparison.visible or source_id not in Catalog.runtime_ids():return
  var definitions: Array[Dictionary]=[Catalog.table_card(source_id),Catalog.back_card(source_id)]
  for i in range(2):
   var active: bool=reverse==(i==1)
@@ -127,7 +128,8 @@ func _refresh_inspector_comparison(data: Dictionary, source_id: String, reverse:
   comparison_effects[i].self_modulate.a=1.0 if active else 0.10
   comparison_titles[i].text=("앞면" if i==0 else "뒷면")+" · "+str(definitions[i].name)
   comparison_titles[i].add_theme_color_override("font_color",Color("f5f7f2") if active else Color("6e7a71"))
-  comparison_effects[i].text=Catalog.table_effect_text(source_id) if i==0 else str(definitions[i].text)
+  comparison_effects[i].text=str(definitions[i].get("rule_detail",definitions[i].text)) if i==0 else str(definitions[i].text)
+  comparison_effects[i].add_theme_font_size_override("font_size",19)
   comparison_effects[i].add_theme_color_override("font_color",Color("f0f3ec") if active else Color("929d94"))
 
 func _style(bg: Color, radius: int = 10, border: Color = Color.TRANSPARENT, width: int = 0) -> StyleBoxFlat:

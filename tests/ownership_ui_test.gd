@@ -54,6 +54,8 @@ func run() -> void:
  check(table.battle_grid.visible and not table.mirror_grid.visible,"top view grid without mirror")
  table.set_top_view(false)
  var id: String=table.cards[enemy_cell].get_meta("card_id")
+ # Pin the texture fixture independently of the new AI's selected card.
+ id="guard"
  var normal: StandardMaterial3D=table.materials[id]
  var dim: StandardMaterial3D=table.materials["opponent:"+id]
  var original: Image=normal.albedo_texture.get_image()

@@ -16,7 +16,11 @@ const CHARACTER: Dictionary = {"name":"린코", "health":40, "energy":3, "draw":
 const PERKS: Array[Dictionary] = [] # Deliberately not implementing an undecided perk system.
 
 static func card(id: String) -> Dictionary:
- return CARDS[id]
+ var live: Dictionary=preload("res://scripts/linked_rules.gd").definition(id)
+ var data: Dictionary=CARDS.get(id,live).duplicate(true)
+ for key in ["name","cost","dark","icon","directions"]:
+  if live.has(key):data[key]=live[key]
+ return data
 
 
 # Temporary identity mapping for interaction verification; effects remain undecided.
@@ -45,14 +49,26 @@ static func back_card(id: String) -> Dictionary:
 # Separate from action cost; temporary balance numbers for table adjudication.
 const TABLE_VALUES := {"strike":4,"observe":2,"guard":3,"echo":1,"cycle":1,"link":5}
 static func table_effect_text(id: String) -> String:
+ var live: Dictionary=preload("res://scripts/linked_rules.gd").definition(id)
+ if not live.is_empty():return str(live.text)
  match id:
   "observe", "echo": return "카드 1장 드로우"
   "cycle": return "행동력 +1"
   _: return "추가 효과 설계 대기"
 
 static func table_card(id: String) -> Dictionary:
+ var live: Dictionary=preload("res://scripts/linked_rules.gd").definition(id)
+ if not live.is_empty():return live
  var data: Dictionary = card(id).duplicate()
  data["table_cost"] = TABLE_VALUES[id]
  data["text"] = table_effect_text(id)
  data["detail"] = "행동 비용 %d · 테이블 코스트 %d\n%s\n배치한 카드는 판정까지 유지됩니다." % [data.cost,TABLE_VALUES[id],table_effect_text(id)]
  return data
+
+static func runtime_ids() -> Array:
+ var rules=preload("res://scripts/linked_rules.gd")
+ rules.ensure()
+ var ids: Array=[]
+ for id in rules.cards:
+  if rules.cards[id].face=="front":ids.append(id)
+ return ids

@@ -33,10 +33,13 @@ func run() -> void:
  var uid: int=ui.model.hand[0].uid
  var id: String=ui.model.hand[0].id
  var energy: int=ui.model.energy
+ var before_score: int=ui.model.player_score
+ var definition: Dictionary=ui.model.definitions[id]
+ var expected_gain: int=int(definition.base_value)*(int(ui.model.rules.score_weight) if definition.base_effect=="score" else (int(ui.model.rules.cube_weight) if definition.base_effect=="cubes" else 0))
  await ui._activate_card(uid,Vector2i(2,1))
  await create_timer(0.5).timeout
  check(ui.model.placed.size()==1 and table.cards.size()==1 and table.mirror_cards.size()==1,"one logical card two views")
- check(ui.model.player_score==int(ui.Catalog.TABLE_VALUES[id]),"score once")
+ check(ui.model.player_score==before_score+expected_gain,"score once")
  check(ui.model.energy==energy-int(ui.Catalog.card(id).cost)+(1 if id=="cycle" else 0),"cost once")
  var far=table.mirror_cards[Vector2i(2,1)]
  check(far.position.is_equal_approx(table.mirror_position(Vector2i(2,1))),"rotated mirror mapping")

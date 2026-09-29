@@ -22,7 +22,7 @@ func _process(delta: float) -> void:
  var enabled: bool=ui.drag_uid>=0 and not (ui.busy or ui.inspector_open or ui.looking or ui.model.finished or ui.help_panel.visible or ui.leaving_battle or is_instance_valid(ui.inventory_layer) or t.top_view or t.opponent_view or t.card_focus_active or t.card_focus_returning)
  if not enabled and not active and not returning:return
  var local: Vector2=ui.stage.get_global_transform_with_canvas().affine_inverse()*pointer
- enabled=enabled and Rect2(20,180,1560,450).has_point(local) and not ui.turn_board.get_rect().has_point(local) and ui._hand_card_at(local)<0
+ enabled=enabled and Rect2(20,180,1560,450).has_point(local) and not ui.turn_board.get_rect().has_point(local) and ui._hand_card_at(local)<0 and (not is_instance_valid(ui.linked_panel) or not ui.linked_panel.get_rect().has_point(local))
  # Raycast in the saved view so camera motion cannot feed back into hover detection.
  var reference: Transform3D=saved if active or returning else t.camera.transform
  var ray: Vector3=reference.basis*(t.camera.global_basis.inverse()*t.camera.project_ray_normal(pointer))
