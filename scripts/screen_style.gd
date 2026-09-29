@@ -5,13 +5,13 @@ const MUTED := Color("606460")
 const PAPER := Color("f7f7f2")
 const YELLOW := Color("f5d335")
 
-static func make_theme() -> Theme:
+static func make_theme(font_size: int = 20) -> Theme:
  var font := SystemFont.new()
  font.font_names = PackedStringArray(["Malgun Gothic", "Noto Sans CJK KR", "Arial"])
  font.allow_system_fallback = true
  var result := Theme.new()
  result.default_font = font
- result.default_font_size = 20
+ result.default_font_size = font_size
  return result
 
 static func style(color: Color, border: Color = Color.TRANSPARENT, width: int = 0, radius: int = 13) -> StyleBoxFlat:
@@ -71,3 +71,9 @@ static func ink_material(white: bool = false) -> ShaderMaterial:
  material.shader = _ink_shader
  material.set_shader_parameter("ink", Color.WHITE if white else INK)
  return material
+
+static func fit_stage(stage: Control, available: Vector2) -> void:
+ var logical_size := Vector2(1600,900)
+ var ratio: float=minf(available.x/logical_size.x,available.y/logical_size.y)
+ stage.scale=Vector2.ONE*ratio
+ stage.position=(available-logical_size*ratio)*0.5

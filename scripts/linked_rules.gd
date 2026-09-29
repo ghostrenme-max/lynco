@@ -5,14 +5,18 @@ const FALLBACK := "res://data/default_battle_cards.json"
 const EFFECTS := ["none","score","cubes","energy","draw"]
 const CONDITIONS := ["any","ally","enemy"]
 const TRIGGERS := ["on_place","on_invest","turn_start","any"]
-const OFFSETS := {"up":Vector2i(0,-1),"right":Vector2i(1,0),"down":Vector2i(0,1),"left":Vector2i(-1,0),"up_left":Vector2i(-1,-1),"up_right":Vector2i(1,-1),"down_left":Vector2i(-1,1),"down_right":Vector2i(1,1)}
+const Grid = preload("res://scripts/board_geometry.gd")
+const OFFSETS := Grid.OFFSETS
 static var loaded := false
 static var cards: Dictionary = {}
 static var settings: Dictionary = {}
 static var load_error := ""
+static var _display_definitions: Dictionary = {}
 
 static func validate(raw: Variant) -> String:
- if not raw is Dictionary or int(raw.get("schema_version",0))!=2:return "규칙 파일 버전 오류"
+ if not raw is Dictionary:return "규칙 파일 버전 오류"
+ var version: Variant=raw.get("schema_version")
+ if (not version is int and not version is float) or version!=2:return "규칙 파일 버전 오류"
  if not raw.get("rules") is Dictionary or not raw.get("cards") is Array:return "규칙/카드 데이터 누락"
  var ranges := {"starting_cubes":[0,100],"turn_cubes":[0,20],"energy":[1,10],"max_turns":[1,30],"cube_weight":[1,20],"score_weight":[0,20],"recover_delay":[1,10],"recover_fee":[0,5],"final_invested_percent":[0,100]}
  for key in ranges:
@@ -27,15 +31,18 @@ static func validate(raw: Variant) -> String:
   var id: String=str(c.get("id",""))
   if id.is_empty() or ids.has(id):return "카드 ID 중복/누락"
   ids[id]=true
-  if str(c.get("name","")).strip_edges().is_empty():return id+": 이름 누락"
+  for field in ["name","kind","description","icon"]:
+   if not c.get(field) is String:return id+": 표시 필드 오류 "+field
+  if not c.get("dark") is bool:return id+": 카드 색상 오류"
+  if str(c.name).strip_edges().is_empty():return id+": 이름 누락"
   if str(c.get("icon","")).contains("/") or str(c.get("icon","")).contains("\\") or not FileAccess.file_exists("res://assets/icons/"+str(c.get("icon",""))):return id+": 심볼 파일 오류"
   if c.get("face") not in ["front","reverse"]:return id+": 카드 면 오류"
   if not c.get("directions") is Array:return id+": 방향 누락"
-  if c.directions.size()!=Array(c.directions).reduce(func(acc, d):
-   if d not in acc:acc.append(d)
-   return acc, []).size():return id+": 중복 방향"
+  var seen: Dictionary={}
   for d in c.directions:
-   if not OFFSETS.has(d):return id+": 방향 오류"
+   if not d is String or not OFFSETS.has(d):return id+": 방향 오류"
+   if seen.has(d):return id+": 중복 방향"
+   seen[d]=true
   if c.get("face")=="reverse":continue
   for key in ["base_effect","link_effect"]:
    if c.get(key) not in EFFECTS:return id+": 실행 효과 오류"
@@ -76,6 +83,13 @@ static func effect_text(kind: String, amount: int) -> String:
 
 static func definition(id: String) -> Dictionary:
  ensure()
+ if not cards.has(id) or cards[id].face!="front":return {}
+ if not _display_definitions.has(id):
+  _display_definitions[id]=_build_definition(id)
+ # Callers may customize a card view; never expose the cached arrays/dictionary.
+ return _display_definitions[id].duplicate(true)
+
+static func _build_definition(id: String) -> Dictionary:
  if not cards.has(id):return {}
  var c: Dictionary=cards[id]
  if c.face!="front":return {}

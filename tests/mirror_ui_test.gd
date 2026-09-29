@@ -19,7 +19,7 @@ func run() -> void:
  check(is_equal_approx(table.get_node("OpponentTable").position.z,-17.8),"two separated tables")
  for prop in table.get_node("DummyProps").get_children():
   check(absf(prop.position.x)-prop.scale.x*0.5>11.25,"props outside table footprints")
- check(table.get_node("Table/Tabletop").mesh.size.x==22.5 and table.get_node("OpponentTable/Tabletop").mesh.size.x==22.5,"both tables 1.5x wide")
+ check(table.get_node("Table/Tabletop").mesh.size==Vector3(22.5,0.22,33.2) and table.get_node("OpponentTable").get_child_count()==0,"one continuous table with preserved board width")
  check(table.opponent_fan.size()==7,"reusable fan pool")
  for card in table.opponent_fan:
   check(card.get_node("Front").material_override==table.opponent_back_material and table.opponent_back_material.albedo_texture==null and table.opponent_back_material.albedo_color==Color.BLACK,"common hidden hand")

@@ -10,6 +10,7 @@ func _process(delta: float) -> void:
  wave_clock=fmod(wave_clock+delta,WAVE_INTERVAL)
  if not reduced_motion and (was_active or wave_clock<WAVE_DURATION):queue_redraw()
 func set_progress(value: int, maximum: int) -> void:
+ if occupied==value and capacity==maximum:return
  occupied=value;capacity=maximum;queue_redraw()
 func _draw() -> void:
  var start:=Vector2(14,size.y*0.5)

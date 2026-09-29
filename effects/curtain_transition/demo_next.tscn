@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="PackedScene" path="res://effects/curtain_transition/demo.tscn" id="1"]
+[node name="CurtainDemoB" instance=ExtResource("1")]
+next_scene = "res://effects/curtain_transition/demo.tscn"
+[node name="Background" parent="." index="0"]
+color = Color(0.025, 0.065, 0.075, 1)
+[node name="Description" parent="." index="2"]
+text = "B 화면 · 커튼이 닫힌 동안 실제 씬 교체 완료\n열림 → 닫힘 → 다음 화면 준비 → 열림"
+[node name="Switch" parent="." index="3"]
+text = "A 화면으로 전환"

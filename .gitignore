@@ -11,3 +11,7 @@ Thumbs.db
 !.env.example
 export_credentials.cfg
 
+
+# Blender automatic backups; editable .blend sources remain tracked
+*.blend1
+tools/blender/*.blend.import

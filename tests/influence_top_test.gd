@@ -20,6 +20,8 @@ func run() -> void:
  while ui.busy or ui.views.is_empty():await process_frame
  root.size=Vector2i(1280,720)
  var t=ui.table
+ # This fixture constructs render-only cards; rule binding is tested separately.
+ t.link_eligibility=Callable()
  var snapshot:=JSON.stringify([ui.model.hand,ui.model.placed,ui.model.energy,ui.model.rng.state])
  for cell in [Vector2i(2,1),Vector2i(2,0),Vector2i(3,1),Vector2i(1,1),Vector2i(2,2)]:
   t.place("observe" if cell==Vector2i(2,1) else "guard",cell,true)
@@ -53,7 +55,7 @@ func run() -> void:
  var top_image: Image=root.get_texture().get_image()
  for corner in [Vector2i(1,1),Vector2i(1278,1),Vector2i(1,718),Vector2i(1278,718)]:
   var color: Color=top_image.get_pixelv(corner)
-  check(maxf(color.r,maxf(color.g,color.b))<0.3,"top corners are black board, never beige")
+  check(color.r>color.g*1.3 and color.r>color.b*1.3 and color.r<0.6,"top corners match dark crimson felt")
  await capture("influence_top_1280")
  var fit_size: float=t.camera.size
  button(MOUSE_BUTTON_WHEEL_UP,Vector2(600,300))

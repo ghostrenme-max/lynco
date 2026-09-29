@@ -40,8 +40,8 @@ func run() -> void:
   if not enemy:own_cell=cell
  check(enemy_cell!=table.INVALID and own_cell!=table.INVALID,"both owners present")
  check(table.get_node("Table/Tabletop").mesh.surface_get_material(0).albedo_color.a==1.0,"near table opaque")
- check(is_equal_approx(table.get_node("OpponentTable/Tabletop").material_override.albedo_color.a,0.84),"far table translucent")
- check(is_equal_approx(table.get_node("BetweenTablesShade").position.z,-8.9),"soft shade centered in gap")
+ check(table.get_node("OpponentTable").get_child_count()==0 and is_equal_approx(table.get_node("Table/Tabletop").mesh.size.z,33.2),"continuous opaque table under both boards")
+ check(is_equal_approx(table.get_node("NPCAnchor").position.z,-8.9) and not table.has_node("BetweenTablesShade"),"central NPC space replaces old table gap")
  for cell in table.mirror_cards:
   check(is_equal_approx(table.mirror_cards[cell].get_node("Front").material_override.albedo_color.a,0.84),"far cards translucent")
   check(table.cards[cell].get_node("Front").material_override.albedo_color.a==1.0,"near cards remain opaque")

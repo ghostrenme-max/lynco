@@ -1,0 +1,9 @@
+{
+  "vertices": 2241,
+  "triangles": 4256,
+  "material_surfaces": 2,
+  "textures": "3 x 1024 PNG, one continuous tablecloth",
+  "simulation": false,
+  "top_height": 0.003,
+  "lowest_height": -2.287
+}

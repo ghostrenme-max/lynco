@@ -9,7 +9,7 @@ func run() -> void:
  change_scene_to_file("res://scenes/battle.tscn");await scene_changed
  var ui=current_scene.get_node("Interface")
  while ui.busy or ui.views.is_empty():await process_frame
- var popup=ui.notification
+ var popup=ui.notification_popup
  var state:=JSON.stringify([ui.model.hand,ui.model.deck,ui.model.rng.state,ui.model.energy])
  for resolution in [Vector2i(1280,720),Vector2i(1920,1080)]:
   root.size=resolution;await process_frame
@@ -28,7 +28,7 @@ func run() -> void:
    await process_frame
  for i in range(30):ui._toast("연속 알림 %d" % i)
  check(popup.caption.text=="연속 알림 29","latest message replaces stale notices")
- check(popup.get_child_count()==1 and popup.content.get_child_count()==1,"no accumulating nodes")
+ check(popup.get_child_count()<=3 and popup.content.get_child_count()==1,"bounded three-bar pool without accumulating nodes")
  check(state==JSON.stringify([ui.model.hand,ui.model.deck,ui.model.rng.state,ui.model.energy]),"notifications preserve battle and RNG")
  ui._set_reduced_motion(true);ui._toast("간결한 알림")
  await create_timer(0.15).timeout

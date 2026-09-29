@@ -1,41 +1,49 @@
 class_name LyncoTableView
 extends Node3D
 
-# Presentation only: cells never affect combat rules or card ownership.
-const COLS := 6
-const ROWS := 5
-const INVALID := Vector2i(-1, -1)
+const Grid = preload("res://scripts/board_geometry.gd")
+const COLS := Grid.COLS
+const ROWS := Grid.ROWS
+const INVALID := Grid.INVALID
 const STEP := Vector2(3.1, 2.35)
 const CARD_METRES := Vector2(1.48, 2.14)
 const CARD_OBJECT = preload("res://scenes/card_3d.tscn")
+const Directions = preload("res://scripts/direction_preview.gd")
+const Catalog = preload("res://scripts/catalog.gd")
+const FAR_OPACITY := 0.84
+const OPPONENT_TABLE_Z: float = -17.8
+const ACTIVE_TABLE_LIGHT: float=6.0
+
+# Presentation owns meshes and camera; the model owns placement and link eligibility.
+var link_eligibility: Callable
 var ui_stage: Control
 var world: Node3D
 var camera: Camera3D
 var placement_camera: Node
-@export_range(1.0, 20.0) var look_yaw_limit_degrees: float = 12.0
-@export_range(1.0, 12.0) var look_pitch_limit_degrees: float = 7.0
+@export_range(1.0, 90.0) var look_yaw_limit_degrees: float = 60.0
+@export_range(1.0, 40.0) var look_pitch_limit_degrees: float = 35.0
 @export var look_sensitivity: float = 0.002
-@export var pan_speed: float = 7.5
+@export var pan_speed: float = 9.0
 @export var pan_limits := Vector2(3.5,2.5)
 var base_camera_position: Vector3
 var base_camera_rotation: Vector3
 var look_offset := Vector2.ZERO
+var look_return_tween: Tween
+@export var look_return_delay: float = 0.5
+@export var look_return_duration: float = 0.65
 var cards: Dictionary = {}
 var materials: Dictionary = {}
 var back_materials: Dictionary = {}
 var black_body_material: StandardMaterial3D
-const Directions = preload("res://scripts/direction_preview.gd")
 var direction_mesh: PlaneMesh
 var direction_material: ShaderMaterial
 var far_direction_material: ShaderMaterial
-const Catalog = preload("res://scripts/catalog.gd")
 var hint: MeshInstance3D
 var hint_material: ShaderMaterial
 var preview_cell := INVALID
 var preview_allowed: bool = false
 var card_mesh: PlaneMesh
 var animations: Array[Tween] = []
-const FAR_OPACITY := 0.84
 var far_materials: Dictionary = {}
 var hovered_cell := INVALID
 var owner_line_mesh: PlaneMesh
@@ -51,6 +59,45 @@ var reduced_motion := false
 var influence_tween: Tween
 var preview_tween: Tween
 
+
+var mirror_cards: Dictionary = {}
+var opponent_fan: Array[Node3D] = []
+var opponent_back_material: StandardMaterial3D
+var camera_transition: Tween
+var opponent_view: bool = false
+var turn_light_tween: Tween
+var saved_player_position: Vector3
+var saved_player_rotation: Vector3
+var saved_look_offset: Vector2
+@export var opponent_camera_position := Vector3(0,9.2,0.0)
+@export var opponent_camera_rotation := Vector3(-0.42,0,0)
+var selected_cell := INVALID
+var influenced_cells: Array[Vector2i] = []
+var influence_range: Array[Vector2i] = []
+var influence_dim: ShaderMaterial
+var influence_glow: ShaderMaterial
+var influence_mesh: PlaneMesh
+var influence_links: Array[MeshInstance3D] = []
+var top_view := false
+var top_transitioning := false
+var top_tween: Tween
+var top_destination: Dictionary = {}
+var top_saved_fov := 75.0
+var top_zoom := 1.0
+var top_saved_transform: Transform3D
+var top_saved_projection: Camera3D.ProjectionType
+var top_saved_table_scale: Vector3
+var top_saved_table_material: Material
+var top_saved_size: float
+var top_hidden: Dictionary = {}
+var card_focus_active := false
+var card_focus_transform: Transform3D
+var card_focus_size: float
+var card_focus_zoom: float
+var card_focus_tween: Tween
+var card_focus_returning := false
+var black_market_open := false
+var black_market_glow: StandardMaterial3D
 func _ready() -> void:
  world=$PlacedCards
  camera=$Camera3D
@@ -80,9 +127,10 @@ func _ready() -> void:
  owner_line_material.albedo_color=Color("dddeda")
  _setup_battle_grid()
  get_viewport().size_changed.connect(_fit_top_view)
- _setup_atmosphere()
+ _setup_npc_space()
  _setup_garnet_cubes()
  _setup_distributors()
+ preload("res://scripts/theatre_room.gd").build(self)
  set_process(false)
 
 func set_card_texture(id: String, texture: Texture2D) -> void:
@@ -105,18 +153,14 @@ func cell_at(local_point: Vector2) -> Vector2i:
  var hit:Variant=Plane(Vector3.UP,0.0).intersects_ray(camera.project_ray_origin(point),camera.project_ray_normal(point))
  if hit==null:return INVALID
  var cell:=Vector2i(roundi(hit.x/STEP.x+2.5),roundi((hit.z+1.3)/STEP.y+2.0))
- if cell.x<0 or cell.x>=COLS or cell.y<0 or cell.y>=ROWS:return INVALID
+ if not Grid.contains(cell):return INVALID
  return cell
 
 func free_cell(cell: Vector2i) -> bool:
- return cell!=INVALID and not cards.has(cell)
+ return Grid.contains(cell) and not cards.has(cell)
 
 func next_cell() -> Vector2i:
- for row in range(ROWS):
-  for col in range(COLS):
-   var cell:=Vector2i(col,row)
-   if free_cell(cell):return cell
- return INVALID
+ return Grid.first_empty(cards)
 
 func screen_position(cell: Vector2i) -> Vector2:
  return ui_stage.get_global_transform_with_canvas().affine_inverse()*camera.unproject_position(cell_position(cell))
@@ -185,17 +229,37 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
 func look_by(relative: Vector2) -> void:
  if placement_camera and (placement_camera.active or placement_camera.returning):return
  if opponent_view or top_view or top_transitioning or card_focus_active or card_focus_returning:return
+ cancel_look_return()
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
 
+func cancel_look_return() -> void:
+ if look_return_tween and look_return_tween.is_valid():look_return_tween.kill()
+ look_return_tween=null
+
+func return_look_after_release() -> void:
+ cancel_look_return()
+ if opponent_view or top_view or top_transitioning or card_focus_active or card_focus_returning:return
+ if placement_camera and (placement_camera.active or placement_camera.returning):return
+ if look_offset.is_zero_approx():return
+ look_return_tween=create_tween()
+ look_return_tween.tween_interval(look_return_delay)
+ look_return_tween.tween_method(_apply_look_offset,look_offset,Vector2.ZERO,0.15 if reduced_motion else look_return_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _apply_look_offset(value: Vector2) -> void:
+ look_offset=value
+ camera.rotation=base_camera_rotation+Vector3(value.y,value.x,0)
+
 func reset_look() -> void:
+ cancel_look_return()
  finish_top_transition()
  if placement_camera:placement_camera.restore()
  select_influence(INVALID)
  if top_view:set_top_view(false)
  if camera_transition and camera_transition.is_valid():camera_transition.kill()
  opponent_view=false
+ _set_turn_lights(false,true)
  look_offset=Vector2.ZERO
  camera.rotation=base_camera_rotation
  camera.position=base_camera_position
@@ -217,6 +281,7 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
 func pan_by(direction: Vector2, delta: float) -> void:
  if placement_camera and (placement_camera.active or placement_camera.returning):return
  if opponent_view or top_view or top_transitioning or card_focus_active or card_focus_returning:return
+ cancel_look_return()
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
@@ -271,17 +336,7 @@ func _set_card_brightness(cell: Vector2i, highlighted: bool) -> void:
  mirror_cards[cell].get_node("Front").material_override=_far_material(material)
 
 # These are render-only counterparts. Only `cards` represents board occupancy.
-const OPPONENT_TABLE_Z: float = -17.8
-var mirror_cards: Dictionary = {}
-var opponent_fan: Array[Node3D] = []
-var opponent_back_material: StandardMaterial3D
-var camera_transition: Tween
-var opponent_view: bool = false
-var saved_player_position: Vector3
-var saved_player_rotation: Vector3
-var saved_look_offset: Vector2
-@export var opponent_camera_position := Vector3(0,9.2,0.0)
-@export var opponent_camera_rotation := Vector3(-0.42,0,0)
+
 
 func mirror_position(cell: Vector2i) -> Vector3:
  var near := cell_position(cell)
@@ -361,6 +416,7 @@ func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int
  show_opponent_hand(hand_after)
 
 func set_opponent_view(enabled: bool, quick: bool = false) -> void:
+ cancel_look_return()
  finish_top_transition()
  if placement_camera:placement_camera.restore()
  if top_view:set_top_view(false)
@@ -370,12 +426,27 @@ func set_opponent_view(enabled: bool, quick: bool = false) -> void:
  if enabled:
   saved_player_position=camera.position; saved_player_rotation=camera.rotation; saved_look_offset=look_offset
  opponent_view=enabled
+ _set_turn_lights(enabled,false,quick)
  hide_preview()
  camera_transition=create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
  camera_transition.tween_property(camera,"position",opponent_camera_position if enabled else saved_player_position,0.14 if quick else 0.46)
  camera_transition.tween_property(camera,"rotation",opponent_camera_rotation if enabled else saved_player_rotation,0.14 if quick else 0.46)
  await camera_transition.finished
  if not enabled:look_offset=saved_look_offset
+
+func _set_turn_lights(opponent: bool, instant: bool=false, quick: bool=false) -> void:
+ if turn_light_tween and turn_light_tween.is_valid():turn_light_tween.kill()
+ var near_light: SpotLight3D=get_node_or_null("TableSpot")
+ var far_light: SpotLight3D=get_node_or_null("FarTableSpot")
+ if not near_light or not far_light:return
+ var near_energy: float=0.0 if opponent else ACTIVE_TABLE_LIGHT
+ var far_energy: float=ACTIVE_TABLE_LIGHT if opponent else 0.0
+ if instant:
+  near_light.light_energy=near_energy;far_light.light_energy=far_energy
+ else:
+  turn_light_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+  turn_light_tween.tween_property(near_light,"light_energy",near_energy,0.14 if quick else 0.46)
+  turn_light_tween.tween_property(far_light,"light_energy",far_energy,0.14 if quick else 0.46)
 
 func _slide_opponent(holder: Node3D, start: Vector3, finish: Vector3, quick: bool) -> Tween:
  holder.position=start
@@ -427,48 +498,16 @@ func _configure_mirror(holder: Node3D) -> void:
   if str(child.name).begins_with("Direction_"):
    child.material_override=far_direction_material
 
-func _setup_atmosphere() -> void:
- for child in $OpponentTable.get_children():
-  if child is MeshInstance3D:
-   child.material_override=_far_material(child.mesh.surface_get_material(0))
- var gap:=MeshInstance3D.new()
- gap.name="BetweenTablesShade"
- var plane:=PlaneMesh.new()
- plane.size=Vector2(24.0,3.4)
- gap.mesh=plane
- var shade:=ShaderMaterial.new()
- shade.shader=preload("res://asset/table_gap.gdshader")
- gap.material_override=shade
- gap.position=Vector3(0,-0.16,OPPONENT_TABLE_Z*0.5)
- gap.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
- add_child(gap)
+func _setup_npc_space() -> void:
+ # Reserved above the continuous tabletop; does not change either 6x5 board.
+ var anchor:=Marker3D.new()
+ anchor.name="NPCAnchor"
+ anchor.position=Vector3(0,0.003,OPPONENT_TABLE_Z*0.5)
+ anchor.set_meta("reserved_size",Vector3(6.0,4.0,3.2))
+ add_child(anchor)
 
 # Visual adjacency preview only; it never applies card effects.
-var selected_cell := INVALID
-var influenced_cells: Array[Vector2i] = []
-var influence_range: Array[Vector2i] = []
-var influence_dim: ShaderMaterial
-var influence_glow: ShaderMaterial
-var influence_mesh: PlaneMesh
-var influence_links: Array[MeshInstance3D] = []
-var top_view := false
-var top_transitioning := false
-var top_tween: Tween
-var top_destination: Dictionary = {}
-var top_saved_fov := 75.0
-var top_zoom := 1.0
-var top_saved_transform: Transform3D
-var top_saved_projection: Camera3D.ProjectionType
-var top_saved_table_scale: Vector3
-var top_saved_table_material: Material
-var top_saved_size: float
-var top_hidden: Dictionary = {}
-var card_focus_active := false
-var card_focus_transform: Transform3D
-var card_focus_size: float
-var card_focus_zoom: float
-var card_focus_tween: Tween
-var card_focus_returning := false
+
 
 func restore_card_focus() -> void:
  if not card_focus_active and not card_focus_returning:return
@@ -493,6 +532,7 @@ func dismiss_card_focus() -> void:
  card_focus_tween.finished.connect(func():card_focus_returning=false)
 
 func click_influence(cell: Vector2i) -> void:
+ cancel_look_return()
  if placement_camera:placement_camera.restore()
  if card_focus_active:
   dismiss_card_focus()
@@ -543,7 +583,7 @@ func select_influence(cell: Vector2i, refresh_only: bool=false) -> void:
   var definition: Dictionary=Catalog.back_card(id) if bool(source.get_meta("reverse",false)) else Catalog.card(id)
   for direction in Directions.for_definition(definition):
    var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])
-   if target.x>=0 and target.x<COLS and target.y>=0 and target.y<ROWS:
+   if Grid.contains(target):
     influence_range.append(target)
    if cards.has(target) and _real_link_allowed(selected_cell,target):influenced_cells.append(target)
  for placed_cell in cards:
@@ -560,6 +600,7 @@ func select_influence(cell: Vector2i, refresh_only: bool=false) -> void:
   influence_tween.tween_property(battle_grid_material,"shader_parameter/influence_reveal",1.0,0.22)
 
 func set_top_view(enabled: bool, animate: bool=false) -> void:
+ cancel_look_return()
  finish_top_transition()
  if placement_camera:placement_camera.restore()
  if top_view==enabled:return
@@ -580,12 +621,12 @@ func set_top_view(enabled: bool, animate: bool=false) -> void:
   top_saved_table_scale=$Table/Tabletop.scale
   top_saved_table_material=$Table/Tabletop.material_override
   $Table/Tabletop.scale=Vector3(10,1,10)
-  var black_board:=StandardMaterial3D.new()
-  black_board.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
-  black_board.albedo_color=Color("202324")
-  $Table/Tabletop.material_override=black_board
+  # Extend the same felt surface under the zoomed board, including its lighting.
+  var felt_board: StandardMaterial3D=top_saved_table_material.duplicate()
+  felt_board.uv1_scale*=Vector3(10,10,1)
+  $Table/Tabletop.material_override=felt_board
   camera.rotation=Vector3(-PI*0.5,0,0)
-  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$BetweenTablesShade,$GarnetCubes,$Distributors]:
+  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$NPCAnchor,$GarnetCubes,$Distributors,$TheatreRoom,$Tablecloths]:
    top_hidden[node]=node.visible
    node.hide()
   for link in influence_links:
@@ -727,8 +768,6 @@ func _refresh_battle_grid() -> void:
  battle_grid.visible=active
  mirror_grid.visible=active and not top_view
 
-var black_market_open := false
-var black_market_glow: StandardMaterial3D
 
 func _setup_distributors() -> void:
  black_market_glow=preload("res://scripts/table_decoration.gd").build_distributors(self,OPPONENT_TABLE_Z)
@@ -739,13 +778,21 @@ func set_black_market_open(enabled: bool) -> void:
  $Distributors/BlackMarket/ActiveLight.visible=enabled
 
 func _real_link_allowed(source_cell: Vector2i, target_cell: Vector2i) -> bool:
- var ui=ui_stage.get_parent()
- if not "model" in ui or not ui.model.has_method("edge_allowed"):return true
- var m=ui.model
- if not m.cell_map.has(source_cell) or not m.cell_map.has(target_cell):return false
- var source: Dictionary=m.cell_map[source_cell]
- var trigger: String=m.definitions[source.entry.id].link_trigger
- return m.edge_allowed(source,m.cell_map[target_cell],"on_place" if trigger=="any" else trigger)
+ # Explicit injection avoids depending on CanvasLayer/Control ancestry.
+ return bool(link_eligibility.call(source_cell,target_cell)) if link_eligibility.is_valid() else true
 
 func refresh_link_rules() -> void:
  if selected_cell!=INVALID:select_influence(selected_cell,true)
+
+func sync_investment_markers(records: Dictionary) -> void:
+ for cell in cards:
+  if not records.has(cell):continue
+  var amount: int=int(records[cell].invested)
+  for holder in [cards[cell],mirror_cards[cell]]:
+   var marker: Label3D=holder.get_node_or_null("InvestmentLabel")
+   # Empty labels never render; allocate only when a card first receives cubes.
+   if marker==null:
+    if amount==0:continue
+    marker=Label3D.new();marker.name="InvestmentLabel";marker.position=Vector3(0,0.18,1.15);marker.rotation_degrees.x=-90
+    marker.font_size=28;marker.pixel_size=0.008;marker.modulate=Color("b582eb");marker.outline_size=5;holder.add_child(marker)
+   marker.text="◆".repeat(amount);marker.visible=amount>0

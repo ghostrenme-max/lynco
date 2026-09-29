@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=3]
+[ext_resource type="PackedScene" path="res://effects/second_flame/flame_2d.tscn" id="1"]
+[ext_resource type="Script" path="res://effects/second_flame/preview.gd" id="2"]
+
+[node name="FlamePreview" type="Node2D"]
+script = ExtResource("2")
+
+[node name="Flame" parent="." instance=ExtResource("1")]
+position = Vector2(320, 558)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 36.0
+offset_top = 24.0
+theme_override_colors/font_color = Color(0.9,0.86,0.77,1)
+theme_override_font_sizes/font_size = 20
+text = "LYNCO  /  FLAME 01"
+
+[node name="Caption" type="Label" parent="."]
+offset_left = 36.0
+offset_top = 596.0
+theme_override_colors/font_color = Color(0.55,0.5,0.43,1)
+theme_override_font_sizes/font_size = 14
+text = "GODOT 4  •  REALTIME SHADER"

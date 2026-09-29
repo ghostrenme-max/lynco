@@ -42,6 +42,7 @@ func run() -> void:
   await process_frame
   ui._set_reduced_motion(quick)
   await ui._restart(20260926)
+  check(is_equal_approx(ui.table.get_node("TableSpot").light_energy,6.0) and is_zero_approx(ui.table.get_node("FarTableSpot").light_energy),"player table alone has active spotlight")
   await RenderingServer.frame_post_draw
   root.get_texture().get_image().save_png("res://test-results/piles_player_"+str(root.size.x)+".png")
   ui._end_turn()
@@ -55,6 +56,8 @@ func run() -> void:
    check(ui.pile_views[i].scale.is_equal_approx(ui.PILE_NEAR_SCALE),"opponent view brings piles closer by uniform scale")
   check(is_equal_approx(ui.opponent_vignette.modulate.a,1.0),"opponent bottom shading shown")
   check(ui.opponent_vignette.mouse_filter==Control.MOUSE_FILTER_IGNORE,"vignette never intercepts input")
+  if ui.table.turn_light_tween and ui.table.turn_light_tween.is_running():await ui.table.turn_light_tween.finished
+  check(is_zero_approx(ui.table.get_node("TableSpot").light_energy) and is_equal_approx(ui.table.get_node("FarTableSpot").light_energy,6.0),"opponent table alone has active spotlight")
   await RenderingServer.frame_post_draw
   root.get_texture().get_image().save_png("res://test-results/piles_opponent_"+str(root.size.x)+".png")
   while ui.busy:await process_frame

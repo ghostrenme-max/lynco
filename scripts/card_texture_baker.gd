@@ -7,9 +7,10 @@ const Symbols = preload("res://scripts/card_symbols.gd")
 static func bake(parent: Node, table: Node3D, ui_theme: Theme, textures: Dictionary, dark_ink: ShaderMaterial, light_ink: ShaderMaterial) -> void:
  # Bake each definition once; all placed instances share its texture/material.
  var pending:Dictionary={}
- var bake_ids: Array = Catalog.runtime_ids()
- for front_id in Catalog.runtime_ids(): bake_ids.append("reverse:" + str(front_id))
- for front_id in Catalog.runtime_ids(): bake_ids.append("opponent:" + str(front_id))
+ var front_ids: Array = Catalog.runtime_ids()
+ var bake_ids: Array = front_ids.duplicate()
+ for front_id in front_ids: bake_ids.append("reverse:" + str(front_id))
+ for front_id in front_ids: bake_ids.append("opponent:" + str(front_id))
  bake_ids.append_array(["back_white","back_black"])
  for raw_id in bake_ids:
   var id: String=str(raw_id)

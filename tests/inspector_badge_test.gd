@@ -17,10 +17,14 @@ func run() -> void:
  check(badge.get_child_count()==0,"cube value needs no hidden numeric label")
  badge.replay_count("3")
  check(badge.revealed_count==0,"starts with zero visible cubes")
+ # Sample exact tween time, independent of GPU frame scheduling at its narrow peak.
+ badge.pulse.pause()
  for i in range(1,4):
-  await create_timer(0.13 if i==1 else 0.23).timeout
+  var steps: int=130 if i==1 else 230
+  for step in range(steps):badge.pulse.custom_step(0.001)
   check(badge.cube_count()==3 and badge.pulse_index==i-1,"sequential cubes")
   check(badge.revealed_count==i and badge.pulse_scale>1.7,"each cube enlarges toward 2x with sequential reveal")
+ badge.pulse.play()
  await create_timer(0.18).timeout
  check(is_equal_approx(badge.pulse_scale,1.0),"returns to original scale")
  badge.replay_count("5")

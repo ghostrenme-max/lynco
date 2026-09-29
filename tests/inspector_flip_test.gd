@@ -6,10 +6,12 @@ func check(ok: bool,message: String) -> void:
  if not ok:push_error(message);quit(1);assert(ok,message)
  checks+=1
 func click_card() -> void:
+ click_at(ui.inspector_card.get_global_rect().get_center())
+func click_at(point: Vector2) -> void:
  for pressed in [true,false]:
   var event:=InputEventMouseButton.new()
   event.button_index=MOUSE_BUTTON_LEFT;event.pressed=pressed
-  event.position=ui.inspector_card.get_global_rect().get_center()
+  event.position=point
   root.push_input(event,true)
 func run() -> void:
  create_timer(30).timeout.connect(func():quit(1))
@@ -52,6 +54,14 @@ func run() -> void:
  ui._inspect_placed("link",false)
  for resolution in [Vector2i(1280,720),Vector2i(1600,900),Vector2i(1920,1080)]:
   root.size=resolution;await process_frame
+  for face in [1,1,0,0]:
+   click_at(ui.comparison_titles[face].get_global_rect().get_center())
+   check(ui.inspector_open and ui.inspector_reverse==(face==1),"comparison heading selects requested face, including repeated clicks")
+   check(ui.comparison_effects[face].self_modulate.a==1.0,"selected comparison explanation visible")
+  click_at(ui.comparison_effects[1].get_global_rect().get_center())
+  check(ui.inspector_reverse and ui.preview_text.text==ui.Catalog.back_card("link").detail,"effect body selects back explanation")
+  click_at(ui.comparison_bands[0].get_global_rect().position+Vector2(5,5))
+  check(not ui.inspector_reverse and ui.preview_text.text==ui.Catalog.table_card("link").detail,"panel padding selects front explanation")
   var left: Rect2=ui.inspector_comparison.get_global_rect()
   check(root.get_visible_rect().encloses(left),"comparison remains inside viewport")
   check(not left.intersects(ui.inspector_card.get_global_rect()),"comparison does not overlap card")

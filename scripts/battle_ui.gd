@@ -2,12 +2,10 @@ extends Control
 
 const DirectionDiagram = preload("res://scripts/direction_diagram.gd")
 const Directions = preload("res://scripts/direction_preview.gd")
-
 const Symbols = preload("res://scripts/card_symbols.gd")
 const UI = preload("res://scripts/screen_style.gd")
 const Inspector = preload("res://scripts/card_inspector.gd")
 const Notification = preload("res://scripts/notification_popup.gd")
-
 const Model = preload("res://scripts/linked_battle_model.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Card = preload("res://scripts/card_view.gd")
@@ -22,10 +20,6 @@ const PILE_SIZE := Vector2(124,172*PILE_HEIGHT_SCALE)
 const PILE_RETREAT := Vector2(0,112)
 const PILE_NEAR_SCALE := Vector2(1.25,1.25)
 const PILE_OUTWARD := [-62.0,44.0]
-var pile_views: Array[Control] = []
-var pile_positions: Array[Vector2] = []
-var pile_motion: Tween
-var opponent_vignette: TextureRect
 const PILE_OPPONENT_ALPHA := 0.45
 # Card center aligns with the left deck center (66 + 83 / 2).
 # Rise vertically above that deck, then deal rightward into the hand.
@@ -38,6 +32,12 @@ const LIFT_GAP: float = 0.028
 const STACK_BEAT: float = 0.045
 const FAN_TIME: float = 0.23
 const FAN_GAP: float = 0.040
+
+
+var pile_views: Array[Control] = []
+var pile_positions: Array[Vector2] = []
+var pile_motion: Tween
+var opponent_vignette: TextureRect
 
 var model := Model.new()
 var linked_panel: Panel
@@ -104,7 +104,7 @@ var reset_button: Button
 var draw_button: Button
 var seed_box: LineEdit
 var seed_label: Label
-var notification: Control
+var notification_popup: Control
 var result_panel: Panel
 var result_title: Label
 var result_body: Label
@@ -118,17 +118,23 @@ var verify_mode: bool = false
 var reduced_motion: bool = false
 var motion_toggle: CheckButton
 var last_sample_us: int = 0
+var _verification_runner: RefCounted
 
+
+var inspector_score: Control
+var table_status: Label
+var garnet_label: Label
+var turn_board: Panel
+var hud_values: Dictionary = {}
+var turn_motion: Tween
+var turn_track: Control
+var turn_caption: Label
+var camera_keys: Dictionary = {}
+var inventory_layer: CanvasLayer
 func _ready() -> void:
  verify_mode = OS.get_cmdline_user_args().has("--verify")
  Engine.max_fps=120
- var font := SystemFont.new()
- font.font_names = PackedStringArray(["Malgun Gothic", "Noto Sans CJK KR", "Arial"])
- font.allow_system_fallback = true
- var ui_theme := Theme.new()
- ui_theme.default_font = font
- ui_theme.default_font_size = 18
- theme = ui_theme
+ theme = UI.make_theme(18)
  for key in ["enemy", "eye", "void", "guard", "memory", "cycle", "link"]:
   textures[key] = load("res://assets/icons/%s.png" % key)
  textures["back_white"] = load("res://asset/front_logo_white.png")
@@ -150,6 +156,7 @@ func _ready() -> void:
  stage = Control.new(); stage.size = Vector2(1600, 900); stage.mouse_filter = Control.MOUSE_FILTER_IGNORE; overlay.add_child(stage)
  table=get_parent().get_node("TableWorld")
  table.ui_stage=stage
+ table.link_eligibility=model.link_allowed_at
  table.placement_camera=preload("res://scripts/placement_camera.gd").new()
  table.placement_camera.ui=self
  add_child(table.placement_camera)
@@ -173,9 +180,7 @@ func _ready() -> void:
   call_deferred("_restart", 20260926)
 
 func _fit_stage() -> void:
- var ratio: float = minf(size.x / 1600.0, size.y / 900.0)
- stage.scale = Vector2.ONE * ratio
- stage.position = (size - Vector2(1600, 900) * ratio) * 0.5
+ UI.fit_stage(stage,size)
 
 func _style(bg: Color, radius: int = 10, border: Color = Color.TRANSPARENT, width: int = 0) -> StyleBoxFlat:
  return UI.style(bg,border,width,radius)
@@ -224,25 +229,16 @@ func _icon(parent: Node, key: String, pos: Vector2, box: Vector2, white: bool = 
  parent.add_child(icon)
  return icon
 
-var inspector_score: Control
-var table_status: Label
-var garnet_label: Label
-var turn_board: Panel
-var hud_values: Dictionary = {}
-var turn_motion: Tween
-var turn_track: Control
-var turn_caption: Label
-var camera_keys: Dictionary = {}
-var inventory_layer: CanvasLayer
+
 func _build_ui() -> void:
  var shade:=Gradient.new()
  shade.offsets=PackedFloat32Array([0.0,0.45,1.0])
- shade.colors=PackedColorArray([Color(0.025,0.03,0.04,0.0),Color(0.025,0.03,0.04,0.28),Color(0.025,0.03,0.04,0.90)])
+ shade.colors=PackedColorArray([Color(0.025,0.03,0.04,0.0),Color(0.025,0.03,0.04,0.70),Color(0.025,0.03,0.04,0.99)])
  var shade_texture:=GradientTexture2D.new()
  shade_texture.gradient=shade;shade_texture.width=16;shade_texture.height=256
  shade_texture.fill_from=Vector2(0,0);shade_texture.fill_to=Vector2(0,1)
  opponent_vignette=TextureRect.new();opponent_vignette.name="OpponentBottomVignette"
- opponent_vignette.position=Vector2(0,590);opponent_vignette.size=Vector2(1600,310)
+ opponent_vignette.position=Vector2(0,470);opponent_vignette.size=Vector2(1600,430)
  opponent_vignette.texture=shade_texture;opponent_vignette.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
  opponent_vignette.mouse_filter=Control.MOUSE_FILTER_IGNORE;opponent_vignette.z_index=-1
  opponent_vignette.modulate.a=0.0;stage.add_child(opponent_vignette)
@@ -271,10 +267,10 @@ func _build_ui() -> void:
   var angle: float=float(i)*TAU/6.0-PI*0.5
   hex_points.append(Vector2(cos(angle),sin(angle))*18)
  garnet_icon.polygon=hex_points
- garnet_icon.color=Color("303733");stage.add_child(garnet_icon)
- garnet_label=_label(stage,"0",Vector2(86,25),Vector2(70,45),30,Color("252c28"))
+ garnet_icon.color=Color("eddfbd");stage.add_child(garnet_icon)
+ garnet_label=_label(stage,"0",Vector2(86,25),Vector2(70,45),30,Color("eddfbd"))
  garnet_label.tooltip_text="골드 · 상점 전용 재화 (전투 큐브와 별개)"
- _panel(stage,Vector2(132,26),Vector2(29,42),Color("303733"),3)
+ _panel(stage,Vector2(132,26),Vector2(29,42),Color("eddfbd"),3)
  _build_card_inspector()
  hover_direction = DirectionDiagram.new()
  hover_direction.size = Vector2(176,152)
@@ -312,10 +308,10 @@ func _build_ui() -> void:
  end_button.pressed.connect(_end_turn)
 
 
- hand_label = _label(stage,"0 / 0",Vector2(184,25),Vector2(210,45),28,Color("252c28"))
+ hand_label = _label(stage,"0 / 0",Vector2(184,25),Vector2(210,45),28,Color("eddfbd"))
  hand_label.tooltip_text="현재 손패 / 전체 내 카드 수 · 손패 최대 %d장" % int(Catalog.CHARACTER.hand_limit)
  for count_label in [garnet_label,hand_label]:
-  count_label.add_theme_color_override("font_color",Color("252c28"))
+  count_label.add_theme_color_override("font_color",Color("eddfbd"))
   count_label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT)
 
  hand_hint = _label(stage,"우클릭 상세 · 드래그 배치",Vector2(805,612),Vector2(410,24),13,MUTED)
@@ -333,7 +329,7 @@ func _build_ui() -> void:
  draw_button.tooltip_text="전투 규칙 외 시연 기능 · 덱에서 카드 1장을 뽑습니다."
  draw_button.pressed.connect(_demo_draw)
 
- notification=Notification.new();notification.position=Vector2(480,510);notification.size=Vector2(640,96);stage.add_child(notification)
+ notification_popup=Notification.new();notification_popup.position=Vector2(440,510);notification_popup.size=Vector2(720,96);stage.add_child(notification_popup)
  seed_label = _label(stage,"SEED",Vector2(1260,686),Vector2(55,22),12,MUTED)
  seed_box=LineEdit.new(); seed_box.position=Vector2(1322,680); seed_box.size=Vector2(140,34)
  seed_box.text="20260926"; seed_box.max_length=10; seed_box.add_theme_font_size_override("font_size",14)
@@ -438,7 +434,7 @@ func _restart(new_seed: int) -> void:
  _close_inspector();_stop_look();table.reset_look();stage.show()
  table.clear_cards();press_uid=-1;drag_uid=-1
  busy=true; selected_uid=-1; inspect_uid=-1; hovered_uid=-1
- notification.clear();result_panel.hide();help_panel.hide()
+ notification_popup.clear();result_panel.hide();help_panel.hide()
  for view in views.values():
   view.stop_motion(); view.queue_free()
  views.clear()
@@ -745,15 +741,15 @@ func _sync_identity_counter() -> void:
  joker_count.text="조커 %d" % int(counts.joker)
 
 func _toast(message: String) -> void:
- notification.reduced_motion=reduced_motion
- notification.present(message)
+ notification_popup.reduced_motion=reduced_motion
+ notification_popup.present(message)
 
 func _check_end() -> void:
  if not model.finished:return
  var reward: int = model.claim_reward()
  result_title.text="승리" if model.winner=="player" else ("무승부" if model.winner=="draw" else "패배")
  result_body.text="종합 %d : %d · %s\n큐브 %d:%d ×%d + 성과 %d:%d ×%d\n획득 골드 +%d · 투자금 정산 %d%%" % [model.player_score,model.opponent_score,model.ending_reason,model.cubes.player,model.cubes.opponent,model.rules.cube_weight,model.performance.player,model.performance.opponent,model.rules.score_weight,reward,model.rules.final_invested_percent]
- notification.clear()
+ notification_popup.clear()
  result_panel.show()
  _sync_ui()
 
@@ -811,150 +807,22 @@ func _process(_delta: float) -> void:
   last_sample_us=now
 
 func _test_pointer(point: Vector2, click: bool = false) -> void:
- # Send real viewport GUI events, so hit testing and mouse enter/exit run too.
- var screen_point:Vector2=stage.get_global_transform_with_canvas()*point
- var motion:=InputEventMouseMotion.new()
- motion.position=screen_point;motion.global_position=screen_point
- get_viewport().push_input(motion,true)
- if click:
-  for pressed in [true,false]:
-   var button:=InputEventMouseButton.new()
-   button.position=screen_point;button.global_position=screen_point
-   button.button_index=MOUSE_BUTTON_LEFT;button.pressed=pressed
-   get_viewport().push_input(button,true)
+ _verification()._test_pointer(point,click)
 
 func _verify_motion() -> void:
- var output_dir:String=ProjectSettings.globalize_path("res://test-results")
- DirAccess.make_dir_recursive_absolute(output_dir)
- var ignore:=FileAccess.open(output_dir+"/.gdignore",FileAccess.WRITE);ignore.close()
- var movie:bool=OS.get_cmdline_user_args().has("--movie-preview")
- if not movie:
-  # Capture both actual back materials, without touching front-face definitions.
-  var samples:Array[LyncoCardView]=[]
-  for index in range(2):
-   var definition:Dictionary=Catalog.table_card("guard" if index==0 else "strike")
-   var sample:=Card.new();stage.add_child(sample)
-   sample.setup({"uid":-100-index},definition,Symbols.texture_for(definition, textures.get(definition.icon)),dark_ink if index==0 else light_ink,textures["back_white" if index==0 else "back_black"])
-   sample.position=Vector2(550+index*330,320);sample.scale=Vector2(1.5,1.5);sample.z_index=90;sample.locked=true
-   sample.set_face_up(false);samples.append(sample)
-   assert((sample.back_logo.position+sample.back_logo.size*0.5).is_equal_approx(Card.CARD_SIZE*0.5))
-  await RenderingServer.frame_post_draw
-  get_viewport().get_texture().get_image().save_png(output_dir+"/card_backs.png")
-  for sample in samples:sample.queue_free()
-  await get_tree().process_frame
- _test_pointer(Vector2(350,105))
- await get_tree().create_timer(0.15).timeout
- _restart(20260926)
- assert(deal_phase=="lift" and busy)
- # The fan must not begin until every new card is visibly in the raised packet.
- while deal_phase=="lift":await get_tree().process_frame
- assert(deal_phase=="stack")
- for i in range(model.hand.size()):
-  var view:LyncoCardView=views[int(model.hand[i].uid)]
-  assert(view.position.distance_to(DRAW_STACK+STACK_CARD_STEP*i)<0.5)
-  assert(absf(view.rotation-deg_to_rad(STACK_FIRST_ANGLE+i*STACK_ANGLE_STEP))<0.001)
-  if i>0:
-   var previous:LyncoCardView=views[int(model.hand[i-1].uid)]
-   assert(view.position.x-previous.position.x>=26.0-0.5,"Lifted cards collapsed into one stack")
-  assert(view.scale.is_equal_approx(Vector2(0.84,0.84)))
-  assert(not view.face_up and view.back_logo.visible)
-  assert(view.back_logo.texture==textures["back_black" if bool(view.data.dark) else "back_white"])
- if not movie:
-  await RenderingServer.frame_post_draw
-  get_viewport().get_texture().get_image().save_png(output_dir+"/motion_stack.png")
- while busy:await get_tree().process_frame
- assert(deal_phase=="idle")
- for view in views.values():
-  assert(view.position.distance_to(view.rest_position)<0.5)
-  assert(view.scale.is_equal_approx(Vector2.ONE))
-  assert(view.face_up and not view.back_logo.visible)
- await get_tree().create_timer(0.35).timeout
- var middle_uid:int=int(model.hand[2].uid)
- var middle:LyncoCardView=views[middle_uid]
- _test_pointer(middle.rest_position+Card.CARD_SIZE*0.5,true)
- await get_tree().create_timer(0.22).timeout
- assert(hovered_uid==middle_uid and selected_uid==middle_uid,"Viewport hover/click did not reach the card")
- for uid in views:
-  assert(absf(views[uid].scale.x-(Card.HOVER_SCALE if uid==middle_uid else Card.PEER_SCALE))<0.001)
- if not movie:
-  await RenderingServer.frame_post_draw
-  get_viewport().get_texture().get_image().save_png(output_dir+"/motion_hover.png")
- # An unmoving pointer must not trigger shrink/expand oscillation.
- for _i in range(15):
-  await get_tree().process_frame
-  assert(hovered_uid==middle_uid)
- if not movie:
-  # Sweep all neutral slots with actual pointer events, including shrunk cards.
-  for entry in model.hand:
-   var view:LyncoCardView=views[int(entry.uid)]
-   _test_pointer(view.rest_position+Card.CARD_SIZE*0.5)
-   await get_tree().create_timer(0.25).timeout
-   assert(hovered_uid==int(entry.uid))
-   assert(absf(view.scale.x-Card.HOVER_SCALE)<0.001)
-   for uid in views:
-    if uid!=int(entry.uid):assert(absf(views[uid].scale.x-Card.PEER_SCALE)<0.001)
- else:
-  for index in [0,3,4]:
-   var view:LyncoCardView=views[int(model.hand[index].uid)]
-   _test_pointer(view.rest_position+Card.CARD_SIZE*0.5)
-   await get_tree().create_timer(0.45).timeout
- _test_pointer(Vector2(350,105))
- await get_tree().create_timer(0.22).timeout
- assert(hovered_uid==-1)
- for view in views.values():assert(view.scale.is_equal_approx(Vector2.ONE))
- if not movie:
-  await _demo_draw();await _demo_draw()
-  assert(model.hand.size()==7 and model.conserved())
-  for entry in model.hand:
-   var view:LyncoCardView=views[int(entry.uid)]
-   _test_pointer(view.rest_position+Card.CARD_SIZE*0.5)
-   await get_tree().create_timer(0.17).timeout
-   assert(hovered_uid==int(entry.uid))
-  _test_pointer(Vector2(350,105))
-  await get_tree().create_timer(0.2).timeout
-  for view in views.values():assert(view.scale.is_equal_approx(Vector2.ONE))
-  await _end_turn()
-  assert(model.conserved() and hovered_uid==-1)
- var result:Dictionary={"two_phase_draw":true,"hover_viewport_events":true,"neutral_hit_slots":true,"stationary_hover_stable":true,"hover_scale":Card.HOVER_SCALE,"other_card_scale":Card.PEER_SCALE,"lift_seconds":LIFT_TIME,"lift_gap_seconds":LIFT_GAP,"stack_pause_seconds":STACK_BEAT,"fan_seconds":FAN_TIME,"fan_gap_seconds":FAN_GAP,"five_card_draw_seconds":LIFT_TIME+4*LIFT_GAP+STACK_BEAT+FAN_TIME+4*FAN_GAP}
- var file:=FileAccess.open(output_dir+"/motion_test.json",FileAccess.WRITE)
- file.store_string(JSON.stringify(result,"  "));file.close()
- print("LYNCO_MOTION_TEST_PASS "+JSON.stringify(result))
- await get_tree().create_timer(0.25).timeout
- get_tree().quit()
+ await _verification()._verify_motion()
 
 func _verify() -> void:
- reduced_motion=true
- await _restart(20260926)
- await get_tree().process_frame
- var baseline: int = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
- for i in range(16):
-  await _restart(20260926)
-  await get_tree().process_frame
-  assert(model.conserved() and table.cards.is_empty())
- assert(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==baseline)
- for i in range(100):
-  if model.finished:break
-  var uid: int = -1
-  for entry in model.hand:
-   if model.unavailable_reason(entry.uid).is_empty():uid=int(entry.uid);break
-  if uid>=0:await _activate_card(uid)
-  else:await _end_turn()
-  assert(model.conserved() and table.cards.size()==model.placed.size())
- assert(model.finished and result_panel.visible and table.cards.size()==Model.CAPACITY)
- var snapshot: String=JSON.stringify([model.hand,model.placed,model.energy])
- await _end_turn();await _demo_draw();await _fill_requested();await _shift_requested()
- assert(snapshot==JSON.stringify([model.hand,model.placed,model.energy]))
- assert(model.claim_reward()==0)
- print("LYNCO_TABLE_VERIFY_PASS 16_restarts nodes=",baseline,"/",baseline," full_match finished_input_guard reward_once")
- get_tree().quit()
+ await _verification()._verify()
 
 func _prepare_table_cards() -> void:
  await preload("res://scripts/card_texture_baker.gd").bake(self,table,theme,textures,dark_ink,light_ink)
  # Warm texture uploads and shader variants before interactive play begins.
 
  var index:int=0
- for id in Catalog.CARDS:
-  table.place(id,Vector2i(index,0),true)
+ for id in Catalog.runtime_ids():
+  if index>=Model.CAPACITY:break
+  table.place(id,Vector2i(index%Table.COLS,floori(float(index)/Table.COLS)),true)
   index+=1
  await get_tree().create_timer(0.15).timeout
  await RenderingServer.frame_post_draw
@@ -963,6 +831,12 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ # Finish captured look even if release lands over a HUD panel or modal region.
+ if looking and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and not event.pressed:
+  _stop_look()
+  table.return_look_after_release()
+  get_viewport().set_input_as_handled()
+  return
  if event is InputEventMouse and not inspector_open and not help_panel.visible and not is_instance_valid(inventory_layer) and is_instance_valid(linked_panel) and linked_panel.is_visible_in_tree() and linked_panel.get_global_rect().has_point(event.position):
   if event is InputEventMouseButton and not event.pressed and drag_uid>=0:
    _cancel_drag()
@@ -1023,6 +897,11 @@ func _input(event: InputEvent) -> void:
   if event is InputEventMouseButton:
    if event.pressed and event.button_index==MOUSE_BUTTON_LEFT and inspector_card.get_global_rect().has_point(event.position):
     _toggle_inspector_face()
+   elif event.pressed and event.button_index==MOUSE_BUTTON_LEFT and inspector_comparison.visible and inspector_comparison.get_global_rect().has_point(event.position):
+    for i in range(comparison_bands.size()):
+     if comparison_bands[i].get_global_rect().has_point(event.position):
+      if inspector_reverse!=(i==1):_toggle_inspector_face()
+      break
    elif event.pressed and (event.button_index==MOUSE_BUTTON_RIGHT or (event.button_index==MOUSE_BUTTON_LEFT and not inspector_card.get_global_rect().has_point(event.position) and not inspector_demo.get_global_rect().has_point(event.position) and not (inspector_comparison.visible and inspector_comparison.get_global_rect().has_point(event.position)))):
     _close_inspector()
    get_viewport().set_input_as_handled();return
@@ -1051,6 +930,7 @@ func _input(event: InputEvent) -> void:
    _inspect_placed(str(holder.get_meta("card_id")),bool(holder.get_meta("reverse",false)),str(holder.get_meta("owner","player")))
    get_viewport().set_input_as_handled();return
   if not Rect2(20,180,1560,450).has_point(point):return
+  table.cancel_look_return()
   looking=true;look_pointer=get_viewport().get_mouse_position()
   previous_mouse_mode=Input.mouse_mode
   Input.mouse_mode=Input.MOUSE_MODE_CAPTURED
@@ -1143,6 +1023,7 @@ func _notification(what: int) -> void:
   if drag_uid>=0:_cancel_drag()
 
 func _stop_look(restore_pointer: bool = true) -> void:
+ if is_instance_valid(table):table.cancel_look_return()
  if not looking:return
  looking=false
  Input.mouse_mode=previous_mouse_mode
@@ -1150,87 +1031,10 @@ func _stop_look(restore_pointer: bool = true) -> void:
   get_viewport().warp_mouse(look_pointer)
 
 func _verify_table() -> void:
- var output:String=ProjectSettings.globalize_path("res://test-results")
- await _restart(20260926)
- await get_tree().process_frame
- var uid:int=int(model.hand[0].uid)
- var view:LyncoCardView=views[uid]
- var start:Vector2=view.rest_position+Card.CARD_SIZE*0.5
- var cell:=Vector2i(2,1)
- var end:Vector2=table.screen_position(cell)
- assert(table.cell_at(end)==cell)
- _test_drag(start,end)
- while busy:await get_tree().process_frame
- await get_tree().create_timer(0.3).timeout
- assert(model.find_card(uid)<0 and table.cards.has(cell) and model.conserved())
- assert(table.cards[cell].get_node("Body").cast_shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
- assert(absf(table.cards[cell].position.y-table.cell_position(cell).y)<0.001)
- var initial:String=JSON.stringify([model.energy,model.hand,model.discard])
- view=views[int(model.hand[0].uid)]
- _test_drag(view.rest_position+Card.CARD_SIZE*0.5,end)
- await get_tree().create_timer(0.2).timeout
- assert(initial==JSON.stringify([model.energy,model.hand,model.discard]))
- _test_drag(view.rest_position+Card.CARD_SIZE*0.5,Vector2(1580,20))
- await get_tree().create_timer(0.2).timeout
- assert(initial==JSON.stringify([model.energy,model.hand,model.discard]))
- # Escape cancels a held card without changing ownership or resources.
- _test_drag(view.rest_position+Card.CARD_SIZE*0.5,end,false)
- assert(drag_uid>=0)
- var escape:=InputEventKey.new();escape.keycode=KEY_ESCAPE;escape.pressed=true
- get_viewport().push_input(escape,true)
- assert(drag_uid==-1 and not table.hint.visible)
- assert(initial==JSON.stringify([model.energy,model.hand,model.discard]))
- await get_tree().create_timer(0.2).timeout
- for hand_view in views.values():assert(hand_view.scale.is_equal_approx(Vector2.ONE))
- _test_pointer(end,true)
- assert(table.card_focus_active and not inspector_open)
- table.dismiss_card_focus()
- await get_tree().create_timer(0.24).timeout
- # Use an attack via the keyboard/button path, retaining existing combat effects.
- for entry in model.hand.duplicate():
-  if str(Catalog.table_card(entry.id).effect)=="damage":
-   await _activate_card(entry.uid)
-   break
- await get_tree().create_timer(0.3).timeout
- _test_pointer(Vector2(350,105))
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/table_scene_1440.png")
- get_window().size=Vector2i(1280,720)
- await get_tree().create_timer(0.2).timeout
- # Same projection and hit testing after resizing.
- var resized_point:Vector2=table.screen_position(Vector2i(4,1))
- assert(table.cell_at(resized_point)==Vector2i(4,1))
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/table_scene_1280.png")
- model.energy=0;_sync_ui()
- for entry in model.hand:
-  if int(Catalog.table_card(entry.id).cost)>0:
-   view=views[entry.uid]
-   initial=JSON.stringify([model.energy,model.hand,model.discard])
-   _test_drag(view.rest_position+Card.CARD_SIZE*0.5,resized_point)
-   await get_tree().create_timer(0.2).timeout
-   assert(initial==JSON.stringify([model.energy,model.hand,model.discard]))
-   break
- await _end_turn()
- assert(table.cards.size()==model.placed.size() and table.cards.size()>0 and model.conserved())
- await _restart(20260926)
- assert(table.cards.is_empty())
- print("LYNCO_TABLE_TEST_PASS drag_snap occupied_outside_rejected energy_rejected escape_cancel placed_inspector shadow landing resize turn_persists_restart_clear")
- get_tree().quit()
+ await _verification()._verify_table()
 
 func _test_drag(start: Vector2, end: Vector2, finish: bool = true) -> void:
- _test_pointer(start)
- var transform:Transform2D=stage.get_global_transform_with_canvas()
- var press:=InputEventMouseButton.new();press.button_index=MOUSE_BUTTON_LEFT;press.pressed=true
- press.position=transform*start;press.global_position=press.position
- get_viewport().push_input(press,true)
- var motion:=InputEventMouseMotion.new();motion.button_mask=MOUSE_BUTTON_MASK_LEFT
- motion.position=transform*end;motion.global_position=motion.position
- get_viewport().push_input(motion,true)
- if not finish:return
- var release:=InputEventMouseButton.new();release.button_index=MOUSE_BUTTON_LEFT;release.pressed=false
- release.position=transform*end;release.global_position=release.position
- get_viewport().push_input(release,true)
+ _verification()._test_drag(start,end,finish)
 
 func _inspect_placed(id: String, reverse: bool = false, card_owner: String = "player") -> void:
  inspector_placed=true
@@ -1251,91 +1055,11 @@ func _inspect_placed(id: String, reverse: bool = false, card_owner: String = "pl
  _show_inspector(data)
 
 func _test_look_mouse(pressed: bool, relative: Vector2 = Vector2.ZERO) -> void:
- var event:=InputEventMouseButton.new()
- event.button_index=MOUSE_BUTTON_RIGHT;event.pressed=pressed
- event.position=stage.get_global_transform_with_canvas()*Vector2(800,320)
- get_viewport().push_input(event,true)
- if pressed and relative!=Vector2.ZERO:
-  var motion:=InputEventMouseMotion.new()
-  motion.button_mask=MOUSE_BUTTON_MASK_RIGHT
-  motion.relative=relative;motion.screen_relative=relative
-  get_viewport().push_input(motion,true)
+ _verification()._test_look_mouse(pressed,relative)
 
 func _verify_look() -> void:
- var output:String=ProjectSettings.globalize_path("res://test-results")
- await _restart(20260926)
- var original:Vector3=table.camera.rotation
- var original_ui:Transform2D=stage.get_global_transform_with_canvas()
- _test_look_mouse(true,Vector2(10000,-10000))
- assert(looking)
- assert(is_equal_approx(table.look_offset.x,-deg_to_rad(12.0)))
- assert(is_equal_approx(table.look_offset.y,deg_to_rad(7.0)))
- _test_look_mouse(false)
- assert(not looking and Input.mouse_mode==Input.MOUSE_MODE_VISIBLE)
- var held:Vector3=table.camera.rotation
- await get_tree().create_timer(0.15).timeout
- assert(table.camera.rotation.is_equal_approx(held))
- assert(stage.get_global_transform_with_canvas().is_equal_approx(original_ui))
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/look_right.png")
- _test_look_mouse(true,Vector2(-20000,20000))
- _test_look_mouse(false)
- assert(is_equal_approx(table.look_offset.x,deg_to_rad(12.0)))
- assert(is_equal_approx(table.look_offset.y,-deg_to_rad(7.0)))
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/look_left.png")
- # Drag at a rotated camera must target the same 3D cell.
- var cell:=Vector2i(2,1)
- var end:Vector2=table.screen_position(cell)
- assert(table.cell_at(end)==cell)
- var uid:int=int(model.hand[0].uid)
- var view:LyncoCardView=views[uid]
- _test_drag(view.rest_position+Card.CARD_SIZE*0.5,end,false)
- assert(drag_uid==uid and table.hint.visible)
- _test_look_mouse(true)
- assert(not looking and table.camera.rotation.is_equal_approx(original+Vector3(-deg_to_rad(7.0),deg_to_rad(12.0),0)))
- _test_look_mouse(false)
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/placement_glow.png")
- # Drag zoom can move the camera during frame capture; project the target again.
- end=table.screen_position(cell)
- if turn_board.get_rect().has_point(end):
-  for row in range(Table.ROWS):
-   var found := false
-   for col in range(Table.COLS):
-    var candidate := Vector2i(col,row)
-    var point: Vector2=table.screen_position(candidate)
-    if table.free_cell(candidate) and table.cell_at(point)==candidate and not turn_board.get_rect().has_point(point):
-     cell=candidate;end=point;found=true;break
-   if found:break
- assert(table.cell_at(end)==cell)
- assert(not turn_board.get_rect().has_point(end))
- var release:=InputEventMouseButton.new()
- release.button_index=MOUSE_BUTTON_LEFT;release.pressed=false
- release.position=stage.get_global_transform_with_canvas()*end
- get_viewport().push_input(release,true)
- while busy:await get_tree().process_frame
- assert(table.cards.has(cell) and model.find_card(uid)<0 and model.conserved())
- assert(not table.hint.visible)
- _test_look_mouse(true,Vector2(20,20))
- _notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
- assert(not looking and Input.mouse_mode==Input.MOUSE_MODE_VISIBLE)
- _test_look_mouse(true)
- var escape:=InputEventKey.new();escape.keycode=KEY_ESCAPE;escape.pressed=true
- get_viewport().push_input(escape,true)
- assert(not looking)
- var reset:=InputEventKey.new();reset.keycode=KEY_R;reset.pressed=true
- get_viewport().push_input(reset,true)
- assert(table.camera.rotation.is_equal_approx(original))
- table.preview(table.screen_position(Vector2i(3,1)),true)
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/table_dark_glow.png")
- table.hide_preview()
- get_window().size=Vector2i(1280,720)
- await get_tree().create_timer(0.2).timeout
- assert(table.cell_at(table.screen_position(Vector2i(3,1)))==Vector2i(3,1))
- print("LYNCO_LOOK_TEST_PASS limits release focus_escape reset rotated_drag drag_exclusion ui_fixed resize glow")
- get_tree().quit()
+ await _verification()._verify_look()
+
 func _build_card_inspector() -> void:
  inspector_layer=Inspector.new()
  inspector_layer.textures=textures
@@ -1404,66 +1128,11 @@ func _hand_card_at(point: Vector2) -> int:
  return found
 
 func _test_inspect_card(uid: int) -> void:
- var view:LyncoCardView=views[uid]
- var point:Vector2=stage.get_global_transform_with_canvas()*(view.rest_position+Card.CARD_SIZE*0.5)
- var event:=InputEventMouseButton.new()
- event.button_index=MOUSE_BUTTON_RIGHT;event.pressed=true;event.position=point
- get_viewport().push_input(event,true)
- event=InputEventMouseButton.new();event.button_index=MOUSE_BUTTON_RIGHT;event.position=point
- get_viewport().push_input(event,true)
+ _verification()._test_inspect_card(uid)
 
 func _verify_inspector() -> void:
- await _restart(20260926)
- var output:String=ProjectSettings.globalize_path("res://test-results")
- var baseline_nodes:int=int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
- var state:String=JSON.stringify([model.hand,model.energy,model.turn,model.discard])
- var original:Vector3=table.camera.rotation
- for dark in [false,true]:
-  var uid:int=-1
-  for entry in model.hand:
-   if bool(Catalog.table_card(entry.id).dark)==dark:uid=int(entry.uid);break
-  assert(uid>=0)
-  _test_inspect_card(uid)
-  assert(inspector_open and not looking and drag_uid<0)
-  assert(inspector_card.get_global_rect().get_center().distance_to(get_viewport_rect().size*0.5)<1)
-  var key:=InputEventKey.new();key.keycode=KEY_SPACE;key.pressed=true
-  get_viewport().push_input(key,true)
-  key=InputEventKey.new();key.keycode=KEY_ENTER;key.pressed=true
-  get_viewport().push_input(key,true)
-  assert(state==JSON.stringify([model.hand,model.energy,model.turn,model.discard]))
-  assert(table.camera.rotation.is_equal_approx(original))
-  await get_tree().create_timer(0.2).timeout
-  await RenderingServer.frame_post_draw
-  get_viewport().get_texture().get_image().save_png(output+("/inspector_black.png" if dark else "/inspector_white.png"))
-  key=InputEventKey.new();key.keycode=KEY_ESCAPE;key.pressed=true
-  get_viewport().push_input(key,true)
-  assert(not inspector_open)
- for i in range(8):
-  _test_inspect_card(int(model.hand[0].uid));assert(inspector_open)
-  _test_pointer(Vector2(100,100),true);assert(not inspector_open)
- _test_inspect_card(int(model.hand[0].uid))
- get_window().size=Vector2i(1280,720)
- await get_tree().create_timer(0.2).timeout
- assert(inspector_card.get_global_rect().get_center().distance_to(get_viewport_rect().size*0.5)<1)
- await RenderingServer.frame_post_draw
- get_viewport().get_texture().get_image().save_png(output+"/inspector_1280.png")
- _notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
- assert(not inspector_open)
- await get_tree().process_frame
- # Number labels allocate reusable reels on their first value change.
- var warmed_nodes: int=int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
- assert(warmed_nodes>=baseline_nodes)
- for repeat in range(3):
-  _test_inspect_card(int(model.hand[0].uid))
-  _close_inspector()
-  await get_tree().process_frame
- assert(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==warmed_nodes)
- _test_look_mouse(true,Vector2(30,20));assert(looking)
- _test_look_mouse(false);assert(not looking)
- assert(state==JSON.stringify([model.hand,model.energy,model.turn,model.discard]))
- print("LYNCO_INSPECTOR_TEST_PASS right_click center dark_white modal_input close resize nodes_stable camera")
- get_tree().quit()
-# Leave only between animations so no suspended combat continuation outlives its scene.
+ await _verification()._verify_inspector()
+
 func _return_to_main() -> void:
  if leaving_battle or busy or inspector_open or looking or drag_uid >= 0 or press_uid >= 0: return
  leaving_battle = true
@@ -1651,13 +1320,10 @@ func _linked_action(reclaim: bool) -> void:
  table.refresh_link_rules()
 
 func _sync_investment_markers() -> void:
- if not is_instance_valid(table):return
- for cell in table.cards:
-  if not model.cell_map.has(cell):continue
-  var record: Dictionary=model.cell_map[cell]
-  for holder in [table.cards[cell],table.mirror_cards[cell]]:
-   var marker: Label3D=holder.get_node_or_null("InvestmentLabel")
-   if marker==null:
-    marker=Label3D.new();marker.name="InvestmentLabel";marker.position=Vector3(0,0.18,1.15);marker.rotation_degrees.x=-90
-    marker.font_size=28;marker.pixel_size=0.008;marker.modulate=Color("b582eb");marker.outline_size=5;holder.add_child(marker)
-   marker.text="◆".repeat(int(record.invested));marker.visible=int(record.invested)>0
+ if is_instance_valid(table):table.sync_investment_markers(model.cell_map)
+
+func _verification() -> RefCounted:
+ if _verification_runner == null:
+  _verification_runner=load("res://tests/support/battle_scenarios.gd").new()
+  _verification_runner.ui=self
+ return _verification_runner

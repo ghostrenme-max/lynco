@@ -64,8 +64,7 @@ func _ready() -> void:
  resized.connect(_fit);_fit();refresh()
 
 func _fit() -> void:
- var ratio:=minf(size.x/1600.0,size.y/900.0)
- stage.scale=Vector2.ONE*ratio;stage.position=(size-stage.size*ratio)*0.5
+ preload("res://scripts/screen_style.gd").fit_stage(stage,size)
 
 func refresh() -> void:
  if carousel_tween:carousel_tween.kill()

@@ -2,7 +2,7 @@ extends Control
 
 const Symbols = preload("res://scripts/card_symbols.gd")
 
-const UI = preload("res://scripts/screen_style.gd")
+const UI = preload("res://scripts/theatre_style.gd")
 const Catalog = preload("res://scripts/catalog.gd")
 const Card = preload("res://scripts/card_view.gd")
 @export var card_book: bool = false
@@ -31,6 +31,10 @@ var selected_card_style: StyleBoxFlat
 var light_detail_style: StyleBoxFlat
 var dark_detail_style: StyleBoxFlat
 
+
+# Additional view state (kept before method declarations).
+var owner_panel: Panel
+
 func _ready() -> void:
  # Existing command-line battle checks keep their original entry point.
  if not card_book:
@@ -42,14 +46,11 @@ func _ready() -> void:
  theme = UI.make_theme()
  dark_ink = UI.ink_material()
  light_ink = UI.ink_material(true)
- var background := ColorRect.new()
- background.color = UI.PAPER
- background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
- background.mouse_filter = Control.MOUSE_FILTER_IGNORE
- add_child(background)
+ UI.background(self)
  stage = Control.new()
  stage.size = Vector2(1600, 900)
  add_child(stage)
+ UI.art(stage,not card_book)
  resized.connect(_fit)
  _fit()
  if card_book: _build_book()
@@ -57,32 +58,29 @@ func _ready() -> void:
 
 func _fit() -> void:
  if not is_instance_valid(stage): return
- var ratio: float = minf(size.x / 1600.0, size.y / 900.0)
- stage.scale = Vector2.ONE * ratio
- stage.position = (size - Vector2(1600, 900) * ratio) * 0.5
+ UI.Base.fit_stage(stage,size)
 
 func _build_main() -> void:
- UI.label(stage, "LYNCO   /   린코", Rect2(88, 54, 600, 40), 25)
- UI.label(stage, "카드를 잇고, 나만의 공연을 만들다.", Rect2(92, 194, 680, 44), 24, UI.MUTED)
- UI.label(stage, "LYNCO", Rect2(80, 235, 760, 156), 120)
- UI.label(stage, "제스터 린코의 카드 실험", Rect2(92, 405, 640, 46), 32)
- UI.label(stage, "같은 카드도 이어 쓰는 순서에 따라 달라집니다.", Rect2(94, 469, 710, 36), 22, UI.MUTED)
- action_buttons.start = UI.button(stage, "게임 시작    →", Rect2(92, 570, 510, 66), true)
+ var logo := UI.title(stage,"LYNCO",Rect2(370,22,860,177),145)
+ logo.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ var subtitle := UI.title(stage,"린 코",Rect2(650,189,300,48),30)
+ subtitle.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ UI.rule(stage,Rect2(515,214,100,1));UI.rule(stage,Rect2(985,214,100,1))
+ action_buttons.start=_main_button("게임 시작",Rect2(540,774,520,96),true)
+ action_buttons.start.add_theme_font_size_override("font_size",34)
  action_buttons.start.pressed.connect(_navigate.bind("res://scenes/battle.tscn"))
- action_buttons.book = UI.button(stage, "수집 카드북", Rect2(92, 653, 330, 62))
+ action_buttons.book=_main_button("카드북",Rect2(130,790,355,76),false,"book")
  action_buttons.book.pressed.connect(_navigate.bind("res://scenes/card_book.tscn"))
- action_buttons.shop = UI.button(stage,"덱 상점",Rect2(92,728,510,58))
+ action_buttons.shop=_main_button("덱 상점",Rect2(1115,790,355,76),false,"shop")
  action_buttons.shop.pressed.connect(_navigate.bind("res://scenes/shop.tscn"))
- action_buttons.quit = UI.button(stage, "종료", Rect2(440, 653, 162, 62))
- action_buttons.quit.pressed.connect(func(): get_tree().quit())
- UI.label(stage, "테이블 점수 대전 · 골드와 해금은 실행 중에만 유지됩니다.", Rect2(94, 794, 750, 34), 18, UI.MUTED)
- UI.panel(stage, Rect2(909, 149, 603, 606), Color("eeeee7"))
- _card(stage, "observe", Vector2(958, 243), 1.65, -0.12)
- _card(stage, "strike", Vector2(1210, 321), 1.65, 0.13)
- UI.label(stage, "관측  →  공허의 일격", Rect2(994, 784, 485, 38), 24)
- UI.label(stage, "카드 조합 · 전투 프로토타입", Rect2(92, 836, 780, 30), 17, UI.MUTED)
+ action_buttons.quit=_main_button("종료",Rect2(1486,851,104,40))
+ action_buttons.quit.pressed.connect(func():get_tree().quit())
  action_buttons.start.grab_focus()
-
+func _main_button(caption: String, rect: Rect2, primary: bool=false, emblem: String="") -> Button:
+ var button:=preload("res://scripts/main_card_button.gd").new()
+ button.configure(caption,rect,primary,emblem)
+ stage.add_child(button)
+ return button
 func _card(parent: Node, id: String, pos: Vector2, zoom: float, angle: float = 0.0) -> Control:
  var data: Dictionary = Catalog.table_card(id)
  var node := Card.new()
@@ -97,70 +95,71 @@ func _card(parent: Node, id: String, pos: Vector2, zoom: float, angle: float = 0
  node.outline_style.shadow_size = 0
  return node
 
-var owner_panel: Panel
+
 
 func _build_book() -> void:
- idle_card_style = UI.style(Color.TRANSPARENT)
- hover_card_style = UI.style(Color.TRANSPARENT, UI.INK, 2)
- selected_card_style = UI.style(Color.TRANSPARENT, UI.YELLOW, 3)
- light_detail_style = UI.style(Color.WHITE)
- dark_detail_style = UI.style(UI.INK)
- UI.label(stage, "LYNCO   /   수집 카드북", Rect2(76, 45, 1000, 55), 36)
- action_buttons.back = UI.button(stage, "←  메인으로", Rect2(1288, 48, 236, 52))
+ idle_card_style=UI.style(Color.TRANSPARENT)
+ hover_card_style=UI.style(Color.TRANSPARENT,UI.PAPER,2)
+ selected_card_style=UI.style(Color.TRANSPARENT,UI.YELLOW,3)
+ light_detail_style=UI.style(UI.PAPER,UI.YELLOW,1)
+ dark_detail_style=UI.style(UI.INK,UI.YELLOW,1)
+ UI.title(stage,"LYNCO  /  카드북",Rect2(120,35,880,76),48)
+ action_buttons.back=UI.button(stage,"← 메인으로",Rect2(1270,48,210,52))
  action_buttons.back.pressed.connect(_navigate.bind("res://scenes/main_menu.tscn"))
- UI.label(stage, "카드 %d종 열람 · 돋보기로 덱 주인 확인 / 구매는 상점에서" % Catalog.runtime_ids().size(), Rect2(78, 121, 1440, 36), 20, UI.MUTED)
- UI.label(stage, "카드 목록", Rect2(78, 181, 410, 34), 23)
- var owner_button := UI.button(stage,"⌕ 덱 주인",Rect2(1050,121,215,48))
- owner_button.tooltip_text = "돋보기 · 선택한 카드가 포함된 덱과 주인 확인"
+ UI.rule(stage,Rect2(120,122,1360,1))
+ UI.label(stage,"카드 목록",Rect2(120,140,420,35),22,UI.PAPER)
+ detail_panel=UI.panel(stage,Rect2(1010,154,470,660),UI.PAPER)
+ selected_label=UI.label(detail_panel,"선택한 카드",Rect2(30,22,410,28),18,UI.MUTED)
+ detail_title=UI.title(detail_panel,"",Rect2(30,63,410,56),38)
+ detail_meta=UI.label(detail_panel,"",Rect2(30,127,410,32),19)
+ detail_icon=UI.symbol(detail_panel,null,Rect2(155,186,160,160))
+ UI.rule(detail_panel,Rect2(30,376,410,1))
+ detail_body=UI.label(detail_panel,"",Rect2(30,399,410,148),20)
+ detail_body.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ detail_note=UI.label(detail_panel,"",Rect2(30,552,410,28),16)
+ var owner_button:=UI.button(detail_panel,"덱 주인 확인",Rect2(30,592,410,46))
  owner_button.pressed.connect(_show_owners)
- detail_panel = UI.panel(stage, Rect2(946, 202, 578, 602), Color.WHITE)
- selected_label = UI.label(detail_panel, "선택한 카드", Rect2(38, 28, 470, 30), 18, UI.MUTED)
- detail_title = UI.label(detail_panel, "", Rect2(38, 79, 510, 60), 37)
- detail_meta = UI.label(detail_panel, "", Rect2(38, 143, 510, 35), 21)
- detail_icon = TextureRect.new()
- detail_icon.position = Vector2(216, 209)
- detail_icon.size = Vector2(146, 146)
- detail_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
- detail_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
- detail_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
- detail_panel.add_child(detail_icon)
- detail_body = UI.label(detail_panel, "", Rect2(38, 389, 502, 140), 21)
- detail_note = UI.label(detail_panel, "", Rect2(38, 536, 502, 37), 18)
- UI.label(stage, "카드 효과와 수치는 현재 전투의 임시 규칙입니다.", Rect2(946, 827, 602, 34), 18, UI.MUTED)
- gallery = Control.new()
- stage.add_child(gallery)
- page_label = UI.label(stage, "", Rect2(690, 181, 220, 32), 18, UI.MUTED)
- if Catalog.runtime_ids().size() > page_size:
-  var previous := UI.button(stage, "←", Rect2(78, 845, 70, 42))
-  var next := UI.button(stage, "→", Rect2(164, 845, 70, 42))
-  previous.pressed.connect(_page_by.bind(-1))
-  next.pressed.connect(_page_by.bind(1))
+ UI.label(stage,"카드 효과와 수치는 테스트용 임시 규칙입니다.",Rect2(1010,829,470,30),17,UI.SOFT)
+ gallery=Control.new();stage.add_child(gallery)
+ page_label=UI.label(stage,"",Rect2(400,813,250,42),20,UI.PAPER)
+ page_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ var previous:=UI.button(stage,"←",Rect2(297,811,70,44))
+ var next:=UI.button(stage,"→",Rect2(683,811,70,44))
+ previous.disabled=Catalog.runtime_ids().size()<=page_size
+ next.disabled=previous.disabled
+ previous.pressed.connect(_page_by.bind(-1));next.pressed.connect(_page_by.bind(1))
  _fill_page()
  _select_card(str(Catalog.runtime_ids()[0]))
  card_buttons[selected_id].grab_focus()
-
 func _fill_page() -> void:
  for child in gallery.get_children():
-  gallery.remove_child(child)
-  child.queue_free()
- card_buttons.clear()
- selected_id = ""
- var ids: Array = Catalog.runtime_ids()
- var first: int = page * page_size
- for index in range(first, mini(first + page_size, ids.size())):
-  var id: String = str(ids[index])
-  var slot: int = index - first
-  var pos := Vector2(88 + (slot % 3) * 282, 240 + floori(float(slot) / 3.0) * 304)
-  _card(gallery, id, pos, 1.2)
-  var button := UI.button(gallery, "", Rect2(pos - Vector2(9, 9), Vector2(208, 292)))
-  button.tooltip_text = str(Catalog.table_card(id).name) + " · 상세 보기"
-  button.add_theme_stylebox_override("normal", idle_card_style)
-  button.add_theme_stylebox_override("hover", hover_card_style)
-  button.add_theme_stylebox_override("pressed", selected_card_style)
+  gallery.remove_child(child);child.queue_free()
+ card_buttons.clear();selected_id=""
+ var ids: Array=Catalog.runtime_ids()
+ var first: int=page*page_size
+ for index in range(first,mini(first+page_size,ids.size())):
+  var id: String=str(ids[index])
+  var data: Dictionary=Catalog.table_card(id)
+  var slot: int=index-first
+  var pos:=Vector2(120+(slot%3)*286,190+floori(float(slot)/3.0)*306)
+  var dark: bool=bool(data.dark)
+  var ink: Color=UI.PAPER if dark else UI.INK
+  var card:=UI.panel(gallery,Rect2(pos,Vector2(256,282)),UI.INK if dark else UI.PAPER)
+  UI.symbol(card,Symbols.texture_for(data),Rect2(65,24,126,126),dark)
+  var name_label:=UI.label(card,str(data.name),Rect2(12,166,232,38),24,ink)
+  name_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+  UI.rule(card,Rect2(22,211,212,1))
+  var effect:=UI.label(card,str(data.text),Rect2(18,223,220,52),18,ink)
+  effect.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+  effect.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+  var button:=UI.button(gallery,"",Rect2(pos,Vector2(256,282)))
+  button.tooltip_text=str(data.name)+" · 상세 보기"
+  button.add_theme_stylebox_override("normal",idle_card_style)
+  button.add_theme_stylebox_override("hover",hover_card_style)
+  button.add_theme_stylebox_override("pressed",selected_card_style)
   button.pressed.connect(_select_card.bind(id))
-  card_buttons[id] = button
- page_label.text = "%d–%d / %d" % [first + 1, mini(first + page_size, ids.size()), ids.size()]
-
+  card_buttons[id]=button
+ page_label.text="%d–%d / %d" % [first+1,mini(first+page_size,ids.size()),ids.size()]
 func _page_by(delta: int) -> void:
  var pages: int = ceili(float(Catalog.runtime_ids().size()) / page_size)
  page = posmod(page + delta, pages)

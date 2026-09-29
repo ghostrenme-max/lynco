@@ -1,4 +1,45 @@
+# 2026-09-29 전체 런타임 코드 점검 / 리팩토링
+
+현재 구조와 검증 상세는 [REFACTOR_REVIEW.md](REFACTOR_REVIEW.md)를 기준으로 합니다.
+
+- `board_geometry.gd`: 모델·표시가 공유하는 6×5 좌표, 경계, 방향, 행 우선 탐색.
+- `linked_rules.gd`: 입력 검증과 프로세스 수명의 표시 정의 캐시. 반환 데이터는 깊은 복사로 독립 유지.
+- `linked_battle_model.gd` → `table_view.link_eligibility`: CanvasLayer 부모 추측 대신 명시적인 판정 콜백 연결.
+- `table_view.gd`: 투자 Label3D 생성·갱신 소유. 투자 전 빈 라벨은 만들지 않음.
+- `tests/support/battle_scenarios.gd`: CLI 검증과 입력 시연을 게임 조정 코드에서 분리. 기존 진입 함수는 호환용 위임 유지, 필요할 때만 로드.
+- `screen_style.fit_stage()`: 화면별 중복 크기 맞춤 제거. 테마 크기 인자로 전투의 18px 기본값 보존.
+
+아래는 이전 작업의 보존 기록이며, 위 구조 설명과 충돌하면 위 내용이 우선합니다.
+
+## 2026-09-29 연속 테이블 구조
+
+- Table/Tabletop·Apron·Collision을 z=-8.9 중심으로 확장. OpponentTable은 보드 위치 호환용 빈 앵커로 유지하고 중복 메시·충돌체를 제거했습니다.
+- Tablecloths/ContinuousCloth 단일 인스턴스. uv1_scale=(4.5,6.64,1)로 긴 천의 직물 밀도 유지. 기존 틈 그림자는 제거, NPCAnchor에는 reserved_size=(6,4,3.2) 메타데이터만 저장하며 게임 규칙에는 관여하지 않습니다.
+- 탑뷰는 천·NPCAnchor를 숨기고 같은 실크 재질을 확장 상판에 유지합니다. 카드와 거울 좌표는 이전 그대로입니다.
+
+## 고정형 실크 테이블보 (2026-09-29)
+
+- `silk_tablecloth.gd`는 `theatre_room.gd`에서 한 번 호출합니다. 원본 Table 하위 구조는 바꾸지 않고 별도 `Tablecloths`에 GLB 두 인스턴스를 배치합니다.
+- 공유 메시 1개/2서피스, 공유 StandardMaterial3D와 알베도·접선 공간 OpenGL 노멀·거칠기 PNG(각 1024). 프레임별 처리·물리·충돌체 없음. 그림자 추가 패스 없음.
+- 상판 천 높이 0.003 < 그리드 0.008 < 카드 0.065. 최대 낙하 약 2.287, 바닥 -3.1 위에 위치. 탑뷰 숨김/복원 목록에 Tablecloths 포함.
+- 재생성: `tools/blender/build_silk_tablecloth.py`, 편집 모델 `tools/blender/lynco_silk_tablecloth.blend`, 실행 모델 `assets/theatre_3d/silk_tablecloth.glb`.
+
 # LYNCO 구조 점검 및 리팩토링
+
+## Blender 전장 환경 계층 (2026-09-29)
+
+- `theatre_room.gd`는 기존 테이블 초기화 후 호출되며 소품/재질/조명만 구성합니다. 테이블 메시·변환·충돌 및 전투 모델은 변경하지 않습니다. `TheatreRoom`은 탑뷰 숨김/복원 목록에 포함됩니다.
+- GLB 5종은 `assets/theatre_3d/`, 편집 가능한 Blender 소스와 재생성 스크립트는 `tools/blender/`에 보관합니다. 소스 폴더는 `.gdignore`로 자동 가져오기에서 제외합니다.
+- `theatre_floor.gdshader`는 바닥 체크와 주변 감쇠만 담당합니다. 소품에 충돌체나 프레임별 게임 로직은 없습니다. 상점/암시장 분배기 생성 코드는 유지합니다.
+
+
+## A 스타일 화면 계층 (2026-09-29)
+
+- `theatre_style.gd`는 메인·카드북·상점 전용 팔레트/프레임/배경 표시를 담당합니다. 공통 글꼴과 숫자 롤링은 `screen_style.gd`를 재사용하고 전투 스타일은 그대로 유지합니다.
+- `assets/theatre/main_stage.png`, `browse_stage.png`는 UI 문자가 없는 배경입니다. 버튼·카드 효과·가격 등은 실제 데이터로 별도 렌더합니다. 배경은 입력을 받지 않습니다.
+- `shop_screen.gd`: 고정 헤더와 ScrollContainer/GridContainer 덱 목록 분리. 실제 덱은 기존 Session.DECKS/JSON을 읽습니다. DUMMY_DECKS는 구매·장착 불가인 UI 전시 전용입니다.
+- `library_screen.gd`: 메인 메뉴 이동과 6장 페이지 카드 목록/상세/덱 주인 확인을 유지합니다. 1600×900 기준 비율을 유지하고 다른 화면비에는 여백을 둡니다.
+
 
 ## 현재 실행 구조: 연결 규칙 연동 (2026-09-29)
 

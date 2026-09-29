@@ -49,6 +49,4 @@ func _ready() -> void:
   get_tree().quit()
 
 func _fit() -> void:
- var ratio: float = minf(size.x / 1600.0, size.y / 900.0)
- stage.scale = Vector2.ONE * ratio
- stage.position = (size - Vector2(1600, 900) * ratio) * 0.5
+ UI.fit_stage(stage,size)

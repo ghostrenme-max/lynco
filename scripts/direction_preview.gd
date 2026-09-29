@@ -2,8 +2,8 @@ extends RefCounted
 
 # Shared visual direction helpers. Live definitions supply the same directions used by linked rules.
 const MAGENTA := Color("f348bd")
-const OFFSETS := {"up":Vector2.UP, "right":Vector2.RIGHT, "down":Vector2.DOWN, "left":Vector2.LEFT,
- "up_left":Vector2(-1,-1), "up_right":Vector2(1,-1), "down_left":Vector2(-1,1), "down_right":Vector2(1,1)}
+const Grid = preload("res://scripts/board_geometry.gd")
+const OFFSETS := Grid.OFFSETS
 const BY_ICON := {
  "void":["right"], "eye":["up", "right"], "guard":["up"],
  "memory":["left"], "cycle":["down"], "link":["left", "right"],

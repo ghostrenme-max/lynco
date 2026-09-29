@@ -46,7 +46,8 @@ func refresh() -> void:
   selection.text="테이블 카드를 클릭해 투자 / 회수\n상대 카드도 방향 조건으로 연결 가능"
   invest_button.text="투자";recover_button.text="회수"
  var uid: int=battle.drag_uid if battle.drag_uid>=0 else battle.selected_uid
- var point: Vector2=battle.stage.get_global_transform_with_canvas().affine_inverse()*battle.get_viewport().get_mouse_position()
- var cell: Vector2i=battle.table.cell_at(point)
- var message: String=m.preview_at(uid,cell) if uid>=0 else "내 카드 선택 → 투자·회수 · 연결 효과는 대상 주인에게"
+ var message: String="내 카드 선택 → 투자·회수 · 연결 효과는 대상 주인에게"
+ if uid>=0:
+  var point: Vector2=battle.stage.get_global_transform_with_canvas().affine_inverse()*battle.get_viewport().get_mouse_position()
+  message=m.preview_at(uid,battle.table.cell_at(point))
  if message!=last_text:preview_label.text=message;last_text=message

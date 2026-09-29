@@ -13,7 +13,7 @@ func run() -> void:
  var origin: Transform3D=t.camera.transform
  var fov: float=t.camera.fov
  t.pan_by(Vector2.RIGHT,0.2)
- check(is_equal_approx(t.camera.position.x-origin.origin.x,1.5),"WASD moves at 7.5 units per second")
+ check(is_equal_approx(t.camera.position.x-origin.origin.x,1.8),"WASD moves at 9 units per second")
  t.camera.transform=origin
  var state:=JSON.stringify([ui.model.hand,ui.model.energy,ui.model.rng.state])
  for quick in [false,true]:

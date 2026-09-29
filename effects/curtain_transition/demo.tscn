@@ -1,0 +1,41 @@
+[gd_scene load_steps=2 format=3]
+[ext_resource type="Script" path="res://effects/curtain_transition/demo.gd" id="1"]
+[node name="CurtainDemoA" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+next_scene = "res://effects/curtain_transition/demo_next.tscn"
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.055, 0.037, 0.035, 1)
+[node name="Title" type="Label" parent="."]
+offset_left = 100.0
+offset_top = 180.0
+theme_override_colors/font_color = Color(0.94, 0.87, 0.66, 1)
+theme_override_font_sizes/font_size = 72
+text = "LYNCO / CURTAIN"
+[node name="Description" type="Label" parent="."]
+offset_left = 106.0
+offset_top = 290.0
+theme_override_font_sizes/font_size = 24
+text = "A 화면 · 가운데가 먼저 당겨지는 빠른 커튼 전환\n열림 → 닫힘 → 다음 화면 준비 → 열림"
+[node name="Switch" type="Button" parent="."]
+offset_left = 106.0
+offset_top = 410.0
+offset_right = 446.0
+offset_bottom = 482.0
+theme_override_font_sizes/font_size = 24
+text = "B 화면으로 전환"
+[node name="Replay" type="Button" parent="."]
+offset_left = 466.0
+offset_top = 410.0
+offset_right = 806.0
+offset_bottom = 482.0
+theme_override_font_sizes/font_size = 24
+text = "커튼만 재생"

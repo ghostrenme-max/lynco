@@ -34,13 +34,10 @@ func fill_hand() -> Dictionary:
  return {"drawn":draw_cards(maxi(0,5-hand.size())),"reason":""}
 
 func free_cell(cell: Vector2i) -> bool:
- return cell.x>=0 and cell.x<6 and cell.y>=0 and cell.y<5 and not cell_map.has(cell)
+ return Grid.contains(cell) and not cell_map.has(cell)
 
 func next_cell() -> Vector2i:
- for y in range(5):
-  for x in range(6):
-   if free_cell(Vector2i(x,y)):return Vector2i(x,y)
- return Vector2i(-1,-1)
+ return Grid.first_empty(cell_map)
 
 func unavailable_reason(uid: int) -> String:
  if finished:return "전투가 종료되었습니다"
@@ -122,7 +119,7 @@ func _outgoing(source: Dictionary, trigger: String, target_side: String="") -> v
   var cell: Vector2i=source.cell+Rules.OFFSETS[d]
   if cell_map.has(cell) and (target_side.is_empty() or cell_map[cell].owner==target_side):_edge(source,cell_map[cell],trigger)
 
-func investment_reason(cell: Vector2i, recover: bool=false, side: String="player") -> String:
+func investment_reason(cell: Vector2i, is_recovery: bool=false, side: String="player") -> String:
  if finished:return "전투가 종료되었습니다"
  if side=="player" and ai_running:return "상대 턴입니다"
  if not cell_map.has(cell):return "배치된 내 카드를 선택하세요"
@@ -130,7 +127,7 @@ func investment_reason(cell: Vector2i, recover: bool=false, side: String="player
  if r.owner!=side:return "상대 카드는 연결만 이용할 수 있습니다"
  if r.reverse:return "뒷면 효과는 아직 미정입니다"
  var c: Dictionary=definitions[r.entry.id]
- if recover:
+ if is_recovery:
   if int(r.invested)==0:return "투자한 큐브가 없습니다"
   if turn-int(r.invested_turn)<int(rules.recover_delay):return "%d턴부터 회수 가능" % (int(r.invested_turn)+int(rules.recover_delay))
  else:
@@ -194,8 +191,8 @@ func _start_links(side: String) -> void:
 
 func _best_enemy_cell(id: String) -> Vector2i:
  var best:=next_cell();var best_value: int=-2147483648
- for y in range(5):
-  for x in range(6):
+ for y in range(Grid.ROWS):
+  for x in range(Grid.COLS):
    var cell:=Vector2i(x,y)
    if not free_cell(cell):continue
    var value:=0
@@ -269,3 +266,9 @@ func conserved() -> bool:
  for r in placed:
   if r.invested<0 or not cell_map.has(r.cell):return false
  return true
+
+func link_allowed_at(source_cell: Vector2i, target_cell: Vector2i) -> bool:
+ if not cell_map.has(source_cell) or not cell_map.has(target_cell):return false
+ var source: Dictionary=cell_map[source_cell]
+ var trigger: String=definitions[source.entry.id].link_trigger
+ return edge_allowed(source,cell_map[target_cell],"on_place" if trigger=="any" else trigger)

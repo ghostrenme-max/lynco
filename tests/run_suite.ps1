@@ -19,7 +19,7 @@ foreach ($name in $Tests) {
     $stderr = Join-Path $output "$name.stderr.log"
     $arguments = @('--path', "`"$project`"", '--script', "res://tests/$name.gd")
     if ($scenario) { $arguments = @('--path', "`"$project`"", '--', "--$name") }
-    if ($name -in @('model_test', 'shift_model_test', 'table_rules_test', 'optimization_model_parity_test')) { $arguments = @('--headless') + $arguments }
+    if ($name -in @('model_test', 'shift_model_test', 'table_rules_test', 'optimization_model_parity_test', 'linked_model_parity_test', 'structure_refactor_test', 'linked_rules_test', 'script_parse_test')) { $arguments = @('--headless') + $arguments }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $process = Start-Process -FilePath $Godot -ArgumentList $arguments -WorkingDirectory $project -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)

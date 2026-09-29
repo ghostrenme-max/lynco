@@ -1,0 +1,9 @@
+# LYNCO A theatre artwork
+
+Built-in image_gen, 2026-09-29. Source: user-approved concept A. Raster images contain background illustration only; live UI provides titles, buttons, resource values and card effects. These two files are stored inside the project and do not depend on the generation cache.
+
+## main_stage.png prompt
+Edit this approved LYNCO screen into a production background image, landscape 16:9. Preserve EXACT theatrical screenprint art style and central jester at card table facing empty chair, curtains, palette and paper texture. REMOVE ALL text including LYNCO, Korean, A marker, ALL UI buttons, menu icons, outlines and horizontal menu divider. Fill removed upper title area with plain textured near-black background, upper 28% must stay empty for live game title. Bottom 20% must be plain textured near-black for live menu. Scene table and character stay in middle band between 30% and 78% image height. No new text or symbols. Keep beautiful original art.
+
+## browse_stage.png prompt
+Edit reference into an EMPTY production UI backdrop for card shop and card library. 16:9. Preserve exact antique screenprinted paper texture, vermilion red curtains only in narrow leftmost and rightmost 5% edges, near-black ink background center, subtle small strip of ivory and black stage floor along bottommost 5%. REMOVE jester, table, chairs, ALL characters, objects, candles, plants, hanging stars and moons, ALL text, logos, buttons, lines, panels, icons and UI. Center 90% must be calm empty almost-black fine paper-grain texture with consistent darkness suitable for live card panels. Minimal theatre wings framing empty space. No people. No lettering.

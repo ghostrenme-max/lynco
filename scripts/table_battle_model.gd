@@ -2,7 +2,8 @@ extends "res://scripts/battle_model.gd"
 
 # Board rules are independent of camera, animation and shop currency.
 const Session = preload("res://scripts/collection_session.gd")
-const CAPACITY := 30
+const Grid = preload("res://scripts/board_geometry.gd")
+const CAPACITY := Grid.CAPACITY
 var placed: Array[Dictionary] = []
 var opponent_hand: Array[Dictionary] = []
 var opponent_deck: Array[Dictionary] = []

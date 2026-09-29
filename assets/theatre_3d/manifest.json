@@ -1,0 +1,26 @@
+{
+  "blender": "5.2.0 LTS",
+  "assets": {
+    "chair": {
+      "objects": 1,
+      "triangles": 30786
+    },
+    "candelabra": {
+      "objects": 22,
+      "triangles": 1368
+    },
+    "curtain": {
+      "objects": 4,
+      "triangles": 2684
+    },
+    "star_pendant": {
+      "objects": 3,
+      "triangles": 40
+    },
+    "pedestal_vase": {
+      "objects": 35,
+      "triangles": 836
+    }
+  },
+  "table_geometry": "Not modified or exported"
+}

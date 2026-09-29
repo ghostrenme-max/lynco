@@ -31,7 +31,9 @@ func _process(delta: float) -> void:
  if enabled:
   enabled=absf(hit.x)<=t.STEP.x*t.COLS*0.5 and absf(hit.z+1.3)<=t.STEP.y*t.ROWS*0.5
  if enabled:
-  if not active and not returning:saved=t.camera.transform
+  if not active and not returning:
+   t.cancel_look_return()
+   saved=t.camera.transform
   active=true
   returning=false
   var offset:=Vector2(clampf((local.x-800.0)/780.0,-1,1),clampf((local.y-405.0)/225.0,-1,1))
