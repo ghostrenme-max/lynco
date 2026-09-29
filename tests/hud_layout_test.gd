@@ -17,10 +17,12 @@ func run() -> void:
  root.size=Vector2i(1280,720);await process_frame
  check(ui.hand_label.text=="%d / %d" % [ui.model.hand.size(),ui.model.total_cards],"hand and total count")
  check(ui.garnet_label.text==str(preload("res://scripts/collection_session.gd").gold),"live currency")
+ check(is_equal_approx(ui.hand_label.position.y,ui.garnet_label.position.y),"resource counts share horizontal row")
+ check(not ui.hand_label.get_rect().intersects(ui.garnet_label.get_rect()),"resource counts do not overlap")
  check(ui.end_button.get_parent()==ui.turn_board,"end turn in board")
  check(ui.hud_values.energy.text=="%02d" % ui.model.energy,"large remaining energy uses two digits")
- check(ui.hud_values.energy.get_theme_font_size("font_size")==96,"remaining energy dominates panel")
- check(ui.turn_board.size.y==266,"reference panel height")
+ check(ui.hud_values.energy.get_theme_font_size("font_size")==78,"remaining energy dominates panel")
+ check(ui.turn_board.size==Vector2(780,216),"reference panel height")
  check(not ui.hud_values.energy.get_rect().intersects(ui.end_button.get_rect()),"energy and end button do not overlap")
  for label in [ui.hand_hint,ui.deck_label,ui.discard_label,ui.exhaust_label,ui.performance_label]:
   check(not label.visible,"bottom explanations hidden")

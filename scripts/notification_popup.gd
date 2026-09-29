@@ -30,7 +30,7 @@ func _ready() -> void:
 func outline() -> PackedVector2Array:
  var w:=maxf(extent.x,6.0)
  var h:=maxf(extent.y,6.0)
- var skew:=minf(h*0.22,w*0.22)
+ var skew:=minf(h*0.12,w*0.12)
  var origin:=(size-Vector2(w,h))*0.5
  var vertices: Array[Vector2]=[origin+Vector2(skew,0),origin+Vector2(w,0),origin+Vector2(w-skew,h),origin+Vector2(0,h)]
  var points:=PackedVector2Array()

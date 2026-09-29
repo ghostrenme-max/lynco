@@ -48,13 +48,15 @@ func run() -> void:
   while not ui.table.opponent_view:await process_frame
   await ui.pile_motion.finished
   for i in range(2):
-   check(ui.pile_views[i].position.is_equal_approx(ui.pile_positions[i]+ui.PILE_RETREAT),"both piles retreat toward player during opponent turn")
+   check(ui.pile_views[i].position.is_equal_approx(ui.pile_positions[i]+ui.PILE_RETREAT+Vector2(ui.PILE_OUTWARD[i],0)),"both piles retreat toward player during opponent turn")
    var rect: Rect2=ui.pile_views[i].get_global_rect()
-   check(root.get_visible_rect().encloses(rect),"retreated piles remain visible")
+   check(rect.intersects(root.get_visible_rect()) and rect.end.y>root.get_visible_rect().end.y,"near piles remain partly visible beyond bottom edge")
+   check(ui.pile_views[i].scale.is_equal_approx(ui.PILE_NEAR_SCALE),"opponent view brings piles closer by uniform scale")
   await RenderingServer.frame_post_draw
   root.get_texture().get_image().save_png("res://test-results/piles_opponent_"+str(root.size.x)+".png")
   while ui.busy:await process_frame
   for i in range(2):check(ui.pile_views[i].position.is_equal_approx(ui.pile_positions[i]),"player turn restores exact pile positions")
+  for pile in ui.pile_views:check(pile.scale.is_equal_approx(Vector2.ONE),"player turn restores pile scale")
   check(ui.model.conserved(),"turn transition conserves cards")
  await ui._restart(20260926)
  await ui._demo_draw();await ui._demo_draw()
@@ -66,5 +68,6 @@ func run() -> void:
  await create_timer(0.03).timeout
  await ui._restart(20260926)
  for i in range(2):check(ui.pile_views[i].position.is_equal_approx(ui.pile_positions[i]),"restart cancels pile motion")
+ for pile in ui.pile_views:check(pile.scale.is_equal_approx(Vector2.ONE),"restart resets pile scale")
  print("PILE_TURN_PASS checks=",checks)
  quit()

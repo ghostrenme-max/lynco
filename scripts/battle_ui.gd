@@ -19,7 +19,9 @@ const DECK_ORIGIN := Vector2(44, 655)
 const DISCARD_ORIGIN := Vector2(1432, 665)
 const PILE_HEIGHT_SCALE := 1.15
 const PILE_SIZE := Vector2(124,172*PILE_HEIGHT_SCALE)
-const PILE_RETREAT := Vector2(0,44)
+const PILE_RETREAT := Vector2(0,112)
+const PILE_NEAR_SCALE := Vector2(1.25,1.25)
+const PILE_OUTWARD := [-62.0,44.0]
 var pile_views: Array[Control] = []
 var pile_positions: Array[Vector2] = []
 var pile_motion: Tween
@@ -231,13 +233,13 @@ var turn_caption: Label
 var camera_keys: Dictionary = {}
 var inventory_layer: CanvasLayer
 func _build_ui() -> void:
- turn_board=_panel(stage,Vector2(600,20),Vector2(970,266),Color("171a18"),20)
+ turn_board=_panel(stage,Vector2(790,20),Vector2(780,216),Color("171a18"),20)
  turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
- turn_caption=_label(turn_board,"",Vector2(28,14),Vector2(710,32),22,Color("eeeee5"))
- table_status=_label(turn_board,"",Vector2(22,218),Vector2(600,36),24,Color.WHITE)
- _label(table_status,"테이블 배치 :",Vector2.ZERO,Vector2(155,36),24,Color.WHITE)
- hud_values.placed=_label(table_status,"",Vector2(161,0),Vector2(65,36),24,Color.WHITE)
- hud_values.energy=_label(turn_board,"",Vector2(783,64),Vector2(160,126),96,Color.WHITE)
+ turn_caption=_label(turn_board,"",Vector2(24,12),Vector2(560,30),20,Color("eeeee5"))
+ table_status=_label(turn_board,"",Vector2(20,174),Vector2(470,32),20,Color.WHITE)
+ _label(table_status,"테이블 배치 :",Vector2.ZERO,Vector2(130,32),20,Color.WHITE)
+ hud_values.placed=_label(table_status,"",Vector2(136,0),Vector2(65,32),20,Color.WHITE)
+ hud_values.energy=_label(turn_board,"",Vector2(632,52),Vector2(128,100),78,Color.WHITE)
  hud_values.energy.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  hud_values.energy.add_theme_constant_override("outline_size",3)
  hud_values.energy.add_theme_color_override("font_outline_color",Color.WHITE)
@@ -246,7 +248,7 @@ func _build_ui() -> void:
  hud_values.opponent_score=_label(table_status,"",Vector2.ZERO,Vector2(48,25),16,Color.WHITE)
  hud_values.player_score.hide();hud_values.opponent_score.hide()
  turn_track=preload("res://scripts/turn_track.gd").new()
- turn_track.position=Vector2(26,52);turn_track.size=Vector2(714,52)
+ turn_track.position=Vector2(24,44);turn_track.size=Vector2(570,42)
  turn_track.mouse_filter=Control.MOUSE_FILTER_IGNORE
  turn_board.add_child(turn_track)
  var garnet_icon:=Polygon2D.new()
@@ -254,12 +256,12 @@ func _build_ui() -> void:
  var hex_points:=PackedVector2Array()
  for i in range(6):
   var angle: float=float(i)*TAU/6.0-PI*0.5
-  hex_points.append(Vector2(cos(angle),sin(angle))*22)
+  hex_points.append(Vector2(cos(angle),sin(angle))*18)
  garnet_icon.polygon=hex_points
  garnet_icon.color=Color("303733");stage.add_child(garnet_icon)
- garnet_label=_label(stage,"0",Vector2(89,25),Vector2(180,45),30,Color("252c28"))
+ garnet_label=_label(stage,"0",Vector2(86,25),Vector2(70,45),30,Color("252c28"))
  garnet_label.tooltip_text="골드 · 상점 전용 재화 (전투 큐브와 별개)"
- _panel(stage,Vector2(37,91),Vector2(29,42),Color("303733"),3)
+ _panel(stage,Vector2(132,26),Vector2(29,42),Color("303733"),3)
  _build_card_inspector()
  hover_direction = DirectionDiagram.new()
  hover_direction.size = Vector2(176,152)
@@ -292,12 +294,12 @@ func _build_ui() -> void:
  menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
  menu_button.pressed.connect(_return_to_main)
 
- end_button = _button(turn_board,"턴 종료",Vector2(790,204),Vector2(155,47),true)
- end_button.add_theme_font_size_override("font_size",22)
+ end_button = _button(turn_board,"턴 종료",Vector2(640,171),Vector2(118,37),true)
+ end_button.add_theme_font_size_override("font_size",20)
  end_button.pressed.connect(_end_turn)
 
 
- hand_label = _label(stage,"0 / 0",Vector2(89,88),Vector2(210,45),28,Color("252c28"))
+ hand_label = _label(stage,"0 / 0",Vector2(184,25),Vector2(210,45),28,Color("252c28"))
  hand_label.tooltip_text="현재 손패 / 전체 내 카드 수 · 손패 최대 %d장" % int(Catalog.CHARACTER.hand_limit)
  for count_label in [garnet_label,hand_label]:
   count_label.add_theme_color_override("font_color",Color("252c28"))
@@ -386,9 +388,13 @@ func _set_piles_retracted(enabled: bool, instant: bool = false) -> void:
  if not instant:
   pile_motion=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
  for i in range(pile_views.size()):
-  var target: Vector2=pile_positions[i]+(PILE_RETREAT if enabled else Vector2.ZERO)
-  if instant:pile_views[i].position=target
-  else:pile_motion.tween_property(pile_views[i],"position",target,0.14 if reduced_motion else 0.46)
+  var target: Vector2=pile_positions[i]+(PILE_RETREAT+Vector2(PILE_OUTWARD[i],0) if enabled else Vector2.ZERO)
+  var target_scale: Vector2=PILE_NEAR_SCALE if enabled else Vector2.ONE
+  if instant:
+   pile_views[i].position=target;pile_views[i].scale=target_scale
+  else:
+   pile_motion.tween_property(pile_views[i],"position",target,0.14 if reduced_motion else 0.46)
+   pile_motion.tween_property(pile_views[i],"scale",target_scale,0.14 if reduced_motion else 0.46)
 
 func _build_overlays() -> void:
  result_panel=_panel(stage,Vector2(470,234),Vector2(660,350),Color("fafbf6"),18,Color("c8cfbd"))
