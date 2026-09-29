@@ -979,6 +979,8 @@ func _input(event: InputEvent) -> void:
   if is_instance_valid(inventory_layer) and event.keycode==KEY_ESCAPE:
    _toggle_inventory();get_viewport().set_input_as_handled();return
  if is_instance_valid(inventory_layer):return
+ if is_instance_valid(table) and table.top_transitioning:
+  get_viewport().set_input_as_handled();return
  if is_instance_valid(table) and (table.card_focus_active or table.card_focus_returning) and event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT]:
   table.dismiss_card_focus()
   press_uid=-1
@@ -987,13 +989,13 @@ func _input(event: InputEvent) -> void:
  if is_instance_valid(table) and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE and event.pressed:
   if not busy and not inspector_open and drag_uid<0 and press_uid<0 and not help_panel.visible:
    _stop_look();_hide_hover_direction();camera_keys.clear()
-   table.set_top_view(not table.top_view)
+   table.set_top_view(not table.top_view,true)
    stage.visible=not table.top_view
    get_viewport().set_input_as_handled()
   return
  if is_instance_valid(table) and table.top_view:
   if event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE,KEY_R]:
-   table.set_top_view(false);stage.show()
+   table.set_top_view(false,true);stage.show()
   elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
    table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0),event.position)
   elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:

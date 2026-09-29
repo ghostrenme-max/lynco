@@ -40,6 +40,7 @@ func run() -> void:
  check(t.mirror_grid.material_override==t.battle_grid_material,"mirror shares grid range")
  await capture("influence_perspective")
  button(MOUSE_BUTTON_MIDDLE,Vector2(600,300))
+ while t.top_transitioning:await process_frame
  check(t.influence_links.filter(func(link):return link.visible).size()==2,"top view hides mirrored links")
  check(t.top_view and not ui.stage.visible,"MMB hides HUD in top view")
  check(t.camera.projection==Camera3D.PROJECTION_ORTHOGONAL and is_equal_approx(t.camera.rotation.x,-PI/2),"vertical orthographic camera")
@@ -77,6 +78,7 @@ func run() -> void:
  root.size=Vector2i(800,720);await process_frame
  check(t.camera.size>16,"narrow aspect fits whole table")
  button(MOUSE_BUTTON_MIDDLE,Vector2(400,300))
+ while t.top_transitioning:await process_frame
  check(not t.top_view and ui.stage.visible and t.camera.transform.is_equal_approx(old_transform),"MMB restores exact camera and HUD")
  root.size=Vector2i(1280,720);await process_frame
  var p: Vector2=ui.stage.get_global_transform_with_canvas()*t.screen_position(Vector2i(2,1))
@@ -98,6 +100,7 @@ func run() -> void:
  for i in range(40):
   t.select_influence(Vector2i(2,1));t.select_influence(t.INVALID)
   button(MOUSE_BUTTON_MIDDLE,Vector2(600,300));button(MOUSE_BUTTON_MIDDLE,Vector2(600,300))
+ while t.top_transitioning:await process_frame
  check(int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))==nodes,"repeated selection/top toggles reuse nodes")
  check(snapshot==JSON.stringify([ui.model.hand,ui.model.placed,ui.model.energy,ui.model.rng.state]),"preview leaves rules and RNG unchanged")
  await ui._restart(20260926)

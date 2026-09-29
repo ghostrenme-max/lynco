@@ -15,7 +15,7 @@ var placement_camera: Node
 @export_range(1.0, 20.0) var look_yaw_limit_degrees: float = 12.0
 @export_range(1.0, 12.0) var look_pitch_limit_degrees: float = 7.0
 @export var look_sensitivity: float = 0.002
-@export var pan_speed: float = 3.0
+@export var pan_speed: float = 5.0
 @export var pan_limits := Vector2(3.5,2.5)
 var base_camera_position: Vector3
 var base_camera_rotation: Vector3
@@ -184,12 +184,13 @@ func set_back_texture(id: String, texture: Texture2D) -> void:
 
 func look_by(relative: Vector2) -> void:
  if placement_camera and (placement_camera.active or placement_camera.returning):return
- if opponent_view or top_view or card_focus_active or card_focus_returning:return
+ if opponent_view or top_view or top_transitioning or card_focus_active or card_focus_returning:return
  look_offset.x=clampf(look_offset.x-relative.x*look_sensitivity,-deg_to_rad(look_yaw_limit_degrees),deg_to_rad(look_yaw_limit_degrees))
  look_offset.y=clampf(look_offset.y-relative.y*look_sensitivity,-deg_to_rad(look_pitch_limit_degrees),deg_to_rad(look_pitch_limit_degrees))
  camera.rotation=base_camera_rotation+Vector3(look_offset.y,look_offset.x,0)
 
 func reset_look() -> void:
+ finish_top_transition()
  if placement_camera:placement_camera.restore()
  select_influence(INVALID)
  if top_view:set_top_view(false)
@@ -215,7 +216,7 @@ func _add_direction_arrows(holder: Node3D, data: Dictionary, quick: bool) -> voi
 
 func pan_by(direction: Vector2, delta: float) -> void:
  if placement_camera and (placement_camera.active or placement_camera.returning):return
- if opponent_view or top_view or card_focus_active or card_focus_returning:return
+ if opponent_view or top_view or top_transitioning or card_focus_active or card_focus_returning:return
  var step := direction.limit_length() * pan_speed * delta
  camera.position.x = clampf(camera.position.x + step.x,base_camera_position.x-pan_limits.x,base_camera_position.x+pan_limits.x)
  camera.position.z = clampf(camera.position.z + step.y,base_camera_position.z-pan_limits.y,base_camera_position.z+pan_limits.y)
@@ -360,6 +361,7 @@ func play_opponent(id: String, cell: Vector2i, hand_before: int, hand_after: int
  show_opponent_hand(hand_after)
 
 func set_opponent_view(enabled: bool, quick: bool = false) -> void:
+ finish_top_transition()
  if placement_camera:placement_camera.restore()
  if top_view:set_top_view(false)
  select_influence(INVALID)
@@ -450,6 +452,10 @@ var influence_glow: ShaderMaterial
 var influence_mesh: PlaneMesh
 var influence_links: Array[MeshInstance3D] = []
 var top_view := false
+var top_transitioning := false
+var top_tween: Tween
+var top_destination: Dictionary = {}
+var top_saved_fov := 75.0
 var top_zoom := 1.0
 var top_saved_transform: Transform3D
 var top_saved_projection: Camera3D.ProjectionType
@@ -553,11 +559,18 @@ func select_influence(cell: Vector2i, refresh_only: bool=false) -> void:
   influence_tween=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
   influence_tween.tween_property(battle_grid_material,"shader_parameter/influence_reveal",1.0,0.22)
 
-func set_top_view(enabled: bool) -> void:
+func set_top_view(enabled: bool, animate: bool=false) -> void:
+ finish_top_transition()
  if placement_camera:placement_camera.restore()
  if top_view==enabled:return
  restore_card_focus()
+ var from_transform:=camera.transform
+ var from_size:=camera.size
+ var from_fov:=camera.fov
+ if not enabled:
+  from_fov=rad_to_deg(2.0*atan(camera.size/(2.0*maxf(camera.position.y,0.01))))
  if enabled:
+  top_saved_fov=camera.fov
   top_zoom=1.0
   top_saved_transform=camera.transform
   top_saved_projection=camera.projection
@@ -587,6 +600,7 @@ func set_top_view(enabled: bool) -> void:
   camera.transform=top_saved_transform
   camera.projection=top_saved_projection
   camera.size=top_saved_size
+  camera.fov=top_saved_fov
   for node in top_hidden:
    if is_instance_valid(node):node.visible=top_hidden[node]
   top_hidden.clear()
@@ -598,8 +612,28 @@ func set_top_view(enabled: bool) -> void:
   for link in influence_links:link.hide()
   _show_influence_links()
 
+ if animate:
+  top_destination={"transform":camera.transform,"projection":camera.projection,"size":camera.size,"fov":top_saved_fov}
+  var target_fov:=rad_to_deg(2.0*atan(camera.size/50.0)) if enabled else top_saved_fov
+  camera.transform=from_transform;camera.size=from_size;camera.fov=from_fov
+  camera.projection=Camera3D.PROJECTION_PERSPECTIVE
+  top_transitioning=true
+  top_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+  var duration:=0.14 if reduced_motion else 0.52
+  top_tween.tween_property(camera,"transform",top_destination.transform,duration)
+  top_tween.tween_property(camera,"fov",target_fov,duration)
+  top_tween.finished.connect(finish_top_transition)
+
+func finish_top_transition() -> void:
+ if not top_transitioning:return
+ if top_tween and top_tween.is_valid():top_tween.kill()
+ camera.transform=top_destination.transform;camera.projection=top_destination.projection
+ camera.size=top_destination.size;camera.fov=top_destination.fov
+ top_transitioning=false
+ if top_view:_fit_top_view()
+
 func _fit_top_view() -> void:
- if not top_view:return
+ if not top_view or top_transitioning:return
  if card_focus_active:return
  var viewport_size: Vector2=get_viewport().get_visible_rect().size
  camera.size=maxf(STEP.y*ROWS+0.1,(STEP.x*COLS+0.1)*viewport_size.y/maxf(viewport_size.x,1.0))*top_zoom
