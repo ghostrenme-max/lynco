@@ -15,7 +15,7 @@ var placement_camera: Node
 @export_range(1.0, 20.0) var look_yaw_limit_degrees: float = 12.0
 @export_range(1.0, 12.0) var look_pitch_limit_degrees: float = 7.0
 @export var look_sensitivity: float = 0.002
-@export var pan_speed: float = 5.0
+@export var pan_speed: float = 7.5
 @export var pan_limits := Vector2(3.5,2.5)
 var base_camera_position: Vector3
 var base_camera_rotation: Vector3
