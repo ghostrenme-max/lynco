@@ -25,6 +25,8 @@ const PILE_OUTWARD := [-62.0,44.0]
 var pile_views: Array[Control] = []
 var pile_positions: Array[Vector2] = []
 var pile_motion: Tween
+var opponent_vignette: TextureRect
+const PILE_OPPONENT_ALPHA := 0.45
 # Card center aligns with the left deck center (66 + 83 / 2).
 # Rise vertically above that deck, then deal rightward into the hand.
 const DRAW_STACK := Vector2(28.5, 450)
@@ -233,6 +235,17 @@ var turn_caption: Label
 var camera_keys: Dictionary = {}
 var inventory_layer: CanvasLayer
 func _build_ui() -> void:
+ var shade:=Gradient.new()
+ shade.offsets=PackedFloat32Array([0.0,0.45,1.0])
+ shade.colors=PackedColorArray([Color(0.025,0.03,0.04,0.0),Color(0.025,0.03,0.04,0.28),Color(0.025,0.03,0.04,0.90)])
+ var shade_texture:=GradientTexture2D.new()
+ shade_texture.gradient=shade;shade_texture.width=16;shade_texture.height=256
+ shade_texture.fill_from=Vector2(0,0);shade_texture.fill_to=Vector2(0,1)
+ opponent_vignette=TextureRect.new();opponent_vignette.name="OpponentBottomVignette"
+ opponent_vignette.position=Vector2(0,590);opponent_vignette.size=Vector2(1600,310)
+ opponent_vignette.texture=shade_texture;opponent_vignette.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+ opponent_vignette.mouse_filter=Control.MOUSE_FILTER_IGNORE;opponent_vignette.z_index=-1
+ opponent_vignette.modulate.a=0.0;stage.add_child(opponent_vignette)
  turn_board=_panel(stage,Vector2(790,20),Vector2(780,216),Color("171a18"),20)
  turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
  turn_caption=_label(turn_board,"",Vector2(24,12),Vector2(560,30),20,Color("eeeee5"))
@@ -387,14 +400,19 @@ func _set_piles_retracted(enabled: bool, instant: bool = false) -> void:
  if pile_motion and pile_motion.is_valid():pile_motion.kill()
  if not instant:
   pile_motion=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+ var shade_alpha:=1.0 if enabled else 0.0
+ if instant:opponent_vignette.modulate.a=shade_alpha
+ else:pile_motion.tween_property(opponent_vignette,"modulate:a",shade_alpha,0.14 if reduced_motion else 0.46)
  for i in range(pile_views.size()):
   var target: Vector2=pile_positions[i]+(PILE_RETREAT+Vector2(PILE_OUTWARD[i],0) if enabled else Vector2.ZERO)
   var target_scale: Vector2=PILE_NEAR_SCALE if enabled else Vector2.ONE
+  var target_alpha:=PILE_OPPONENT_ALPHA if enabled else 1.0
   if instant:
-   pile_views[i].position=target;pile_views[i].scale=target_scale
+   pile_views[i].position=target;pile_views[i].scale=target_scale;pile_views[i].modulate.a=target_alpha
   else:
    pile_motion.tween_property(pile_views[i],"position",target,0.14 if reduced_motion else 0.46)
    pile_motion.tween_property(pile_views[i],"scale",target_scale,0.14 if reduced_motion else 0.46)
+   pile_motion.tween_property(pile_views[i],"modulate:a",target_alpha,0.14 if reduced_motion else 0.46)
 
 func _build_overlays() -> void:
  result_panel=_panel(stage,Vector2(470,234),Vector2(660,350),Color("fafbf6"),18,Color("c8cfbd"))
