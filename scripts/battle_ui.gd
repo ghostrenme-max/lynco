@@ -1,5 +1,6 @@
 extends Control
 
+const CubeTest = preload("res://scripts/temporary_cube_test.gd")
 const DirectionDiagram = preload("res://scripts/direction_diagram.gd")
 const Directions = preload("res://scripts/direction_preview.gd")
 const Symbols = preload("res://scripts/card_symbols.gd")
@@ -36,6 +37,8 @@ const FAN_GAP: float = 0.040
 
 var pile_views: Array[Control] = []
 var pile_positions: Array[Vector2] = []
+var cube_animating:=false
+var discard_phase: String="idle"
 var pile_motion: Tween
 var opponent_vignette: TextureRect
 
@@ -139,6 +142,8 @@ func _ready() -> void:
   textures[key] = load("res://assets/icons/%s.png" % key)
  textures["back_white"] = load("res://asset/front_logo_white.png")
  textures["back_black"] = load("res://asset/black_back_logo_red.png")
+ textures["pile_left"] = load("res://asset/pile_logo_left.png")
+ textures["pile_right"] = load("res://asset/pile_logo_right.png")
  textures["shift_reverse"] = load("res://assets/icons/shift_reverse.png")
  # Measure visible artwork once; share the normalized logo across all back views.
  for back_key in ["back_white", "back_black"]:
@@ -269,7 +274,7 @@ func _build_ui() -> void:
  garnet_icon.polygon=hex_points
  garnet_icon.color=Color("eddfbd");stage.add_child(garnet_icon)
  garnet_label=_label(stage,"0",Vector2(86,25),Vector2(70,45),30,Color("eddfbd"))
- garnet_label.tooltip_text="골드 · 상점 전용 재화 (전투 큐브와 별개)"
+ garnet_label.tooltip_text="현재 보유 큐브 · 카드에 투자 중인 큐브 제외"
  _panel(stage,Vector2(132,26),Vector2(29,42),Color("eddfbd"),3)
  _build_card_inspector()
  hover_direction = DirectionDiagram.new()
@@ -383,11 +388,20 @@ func _build_pile(pos: Vector2, black: bool) -> void:
   _panel(pile,Vector2(-i*4,i*4),PILE_SIZE,INK if black else Color("8c2633"),9,Color("848b7c") if black else Color("b9c1b0"))
  var back := TextureRect.new()
  back.size=PILE_SIZE
- back.texture=textures["back_black" if black else "back_white"]
+ back.texture=textures["pile_right" if black else "pile_left"]
  back.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
  back.stretch_mode=TextureRect.STRETCH_SCALE
  var pile_material: ShaderMaterial=(Card.BLACK_BACK_MATERIAL if black else Card.BACK_MATERIAL).duplicate()
  pile_material.set_shader_parameter("logo_height_scale",PILE_HEIGHT_SCALE)
+ var logo_image: Image=back.texture.get_image()
+ var logo_bounds:=Rect2(logo_image.get_used_rect())
+ var logo_size:=Vector2(logo_image.get_size())
+ if logo_bounds.has_area():
+  pile_material.set_shader_parameter("logo_region",Vector4(logo_bounds.position.x/logo_size.x,logo_bounds.position.y/logo_size.y,logo_bounds.size.x/logo_size.x,logo_bounds.size.y/logo_size.y))
+ if black:
+  pile_material.set_shader_parameter("use_texture_color",true)
+  # Balance the wider, shorter jester silhouette against the crown.
+  pile_material.set_shader_parameter("logo_size_scale",1.15)
  back.material=pile_material
  back.mouse_filter=Control.MOUSE_FILTER_IGNORE
  pile.add_child(back)
@@ -439,6 +453,7 @@ func _restart(new_seed: int) -> void:
   view.stop_motion(); view.queue_free()
  views.clear()
  model.reset(new_seed)
+ table.get_node("GarnetCubes").reset_count(int(model.cubes.player))
  table.show_opponent_hand(5)
  var drawn: Array = model.fill_hand().drawn
  _sync_ui()
@@ -457,7 +472,7 @@ func _reset_requested() -> void:
 func _spawn(entry: Dictionary) -> LyncoCardView:
  var view := Card.new()
  view.reduced_motion=reduced_motion
- var definition: Dictionary=Catalog.table_card(entry.id)
+ var definition: Dictionary=CubeTest.decorate(entry,Catalog.table_card(entry.id))
  hand_layer.add_child(view)
  view.setup(entry,definition,Symbols.texture_for(definition, textures.get(definition.icon)),light_ink if bool(definition.dark) else dark_ink,textures["back_black" if bool(definition.dark) else "back_white"])
  view.chosen.connect(_select_card)
@@ -602,6 +617,7 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  selected_uid=-1
  var result: Dictionary=model.play_at(uid,cell)
  if not bool(result.ok):busy=false;_sync_ui();return
+ await _animate_cube_changes()
  var view: LyncoCardView=views[uid]
  if bool(result.get("reverse", false)):
   var revealed := Card.new()
@@ -645,16 +661,27 @@ func _end_turn() -> void:
  _clear_hand_focus()
  _sync_ui()
  if not views.is_empty():
-  var tween:=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-  var index:int=0
-  for view in views.values():
-   view.stop_motion();view.locked=true
-   var delay:float=index*0.018
-   tween.tween_property(view,"position",DISCARD_ORIGIN,0.12 if reduced_motion else 0.2).set_delay(delay)
-   tween.tween_property(view,"scale",Vector2(0.4,0.4),0.2).set_delay(delay)
-   tween.tween_property(view,"modulate:a",0.0,0.2).set_delay(delay)
+  discard_phase="gather"
+  var packet: Array[Dictionary]=[]
+  var tween:=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+  var index:=0
+  for entry in model.hand:
+   var view: LyncoCardView=views[int(entry.uid)]
+   view.stop_motion();view.locked=true;view.set_selected(false)
+   var target:=Vector2(721,540)+Vector2(2,-2)*index
+   var delay:float=(model.hand.size()-1-index)*(0.006 if reduced_motion else 0.025)
+   var duration:float=0.10 if reduced_motion else 0.26
+   view.z_index=60+index
+   tween.tween_property(view,"position",target,duration).set_delay(delay)
+   tween.tween_property(view,"rotation",0.0,duration).set_delay(delay)
+   tween.tween_property(view,"scale",Vector2.ONE*0.84,duration).set_delay(delay)
+   packet.append({"id":str(entry.id),"reverse":bool(entry.get("concealed",false)),"center":target+Card.CARD_SIZE*0.5})
    index+=1
   await tween.finished
+  discard_phase="flight"
+  for view in views.values():view.hide()
+  await table.store_hand_packet(packet,reduced_motion)
+ discard_phase="idle"
  for view in views.values():view.queue_free()
  views.clear()
  var result: Dictionary=model.end_turn()
@@ -670,6 +697,7 @@ func _end_turn() -> void:
  await get_tree().create_timer(0.06 if reduced_motion else 0.18).timeout
  _set_piles_retracted(false)
  await table.set_opponent_view(false,reduced_motion)
+ await _animate_cube_changes()
  if not model.finished:table.show_opponent_hand(5)
  _sync_ui()
  _toast("상대 %d장 배치 · %s" % [result.placements.size(),"판정" if model.finished else "내 차례"])
@@ -707,7 +735,7 @@ func _sync_ui() -> void:
     turn_motion=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
     turn_motion.tween_property(turn_caption,"position:x",28.0,0.2)
   turn_track.set_progress(model.placed.size(),Model.CAPACITY)
-  garnet_label.text=str(preload("res://scripts/collection_session.gd").gold)
+  garnet_label.text=str(model.cubes.player)
  if busy or model.finished: _hide_hover_direction()
  deck_label.text="덱  %d" % model.deck.size()
  discard_label.text="버림  %d" % model.discard.size()
@@ -754,6 +782,8 @@ func _check_end() -> void:
  _sync_ui()
 
 func _unhandled_key_input(event: InputEvent) -> void:
+ if cube_animating:
+  get_viewport().set_input_as_handled();return
  if is_instance_valid(inventory_layer):return
  if not event is InputEventKey or not event.pressed or event.echo:return
  if event.keycode==KEY_F1:
@@ -793,6 +823,7 @@ func _update_performance() -> void:
  performance_label.text="%d FPS  ·  엔진 프레임 %.2f ms  ·  드로우 콜 %d  ·  노드 %d" % [Engine.get_frames_per_second(),Performance.get_monitor(Performance.TIME_PROCESS)*1000.0,int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))]
 
 func _process(_delta: float) -> void:
+ if cube_animating:return
  if not camera_keys.is_empty():
   if _hand_action_blocked() or not get_window().has_focus():
    camera_keys.clear()
@@ -831,6 +862,8 @@ func _prepare_table_cards() -> void:
 
 
 func _input(event: InputEvent) -> void:
+ if cube_animating:
+  get_viewport().set_input_as_handled();return
  # Finish captured look even if release lands over a HUD panel or modal region.
  if looking and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and not event.pressed:
   _stop_look()
@@ -843,10 +876,11 @@ func _input(event: InputEvent) -> void:
   return
  if get_node("/root/WindowControls").handle_shortcut(event):return
  if event is InputEventKey and event.pressed and not event.echo:
-  if event.physical_keycode==KEY_KP_0 or event.keycode==KEY_KP_0:
+  if event.physical_keycode in [KEY_KP_0,KEY_0] or event.keycode in [KEY_KP_0,KEY_0]:
    preload("res://scripts/collection_session.gd").add_preview_items()
+   CubeTest.prepare_items()
    if is_instance_valid(inventory_layer):inventory_layer.get_child(0).refresh()
-   else:_toast("임시 아이템 6개 준비 · F로 확인")
+   else:_toast("임시 아이템 준비 · F로 확인")
    get_viewport().set_input_as_handled();return
   if event.physical_keycode==KEY_F or event.keycode==KEY_F:
    _toggle_inventory();get_viewport().set_input_as_handled();return
@@ -868,10 +902,13 @@ func _input(event: InputEvent) -> void:
    get_viewport().set_input_as_handled()
   return
  if is_instance_valid(table) and table.top_view:
-  if event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE,KEY_R]:
+  if event is InputEventMouseMotion:
+   table.update_top_hover(event.position)
+  elif event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE,KEY_R]:
    table.set_top_view(false,true);stage.show()
   elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
    table.zoom_top_view((1.0 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -1.0)*maxf(event.factor,1.0),event.position)
+   table.update_top_hover(event.position)
   elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
    table.click_influence(table.cell_at(stage.get_global_transform_with_canvas().affine_inverse()*event.position))
   get_viewport().set_input_as_handled()
@@ -1308,13 +1345,16 @@ func _toggle_inventory() -> void:
  var inventory:=preload("res://scripts/inventory_panel.gd").new()
  inventory.theme=theme
  inventory_layer.add_child(inventory)
+ CubeTest.attach_inventory(self,inventory)
 
 func _linked_action(reclaim: bool) -> void:
  if busy or model.finished or inspector_open or help_panel.visible or is_instance_valid(inventory_layer) or drag_uid>=0:return
  var cell: Vector2i=table.selected_cell
  busy=true
  var result: Dictionary=model.recover(cell) if reclaim else model.invest(cell)
- if result.ok:await _animate_draw(result.drawn)
+ if result.ok:
+  await _animate_cube_changes()
+  await _animate_draw(result.drawn)
  _toast(result.reason)
  busy=false;_sync_ui()
  table.refresh_link_rules()
@@ -1327,3 +1367,17 @@ func _verification() -> RefCounted:
   _verification_runner=load("res://tests/support/battle_scenarios.gd").new()
   _verification_runner.ui=self
  return _verification_runner
+
+func _animate_cube_changes() -> void:
+ if model.cube_changes.is_empty():return
+ var changes:Array=model.cube_changes.duplicate();model.cube_changes.clear()
+ var was_busy:bool=busy
+ busy=true;cube_animating=true
+ _stop_look();camera_keys.clear();_hide_hover_direction();_clear_hand_focus()
+ _sync_ui()
+ var pile=table.get_node("GarnetCubes")
+ var was_visible:bool=pile.visible
+ pile.show()
+ await pile.animate_changes(self,changes)
+ pile.visible=was_visible
+ cube_animating=false;busy=was_busy;_sync_ui()

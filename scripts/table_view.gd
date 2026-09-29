@@ -46,6 +46,10 @@ var card_mesh: PlaneMesh
 var animations: Array[Tween] = []
 var far_materials: Dictionary = {}
 var hovered_cell := INVALID
+const TOP_HOVER_DELAY := 0.45
+var top_hover_elapsed := 0.0
+var top_hover_revealed := false
+var top_hover_tween: Tween
 var owner_line_mesh: PlaneMesh
 var owner_dash_mesh: PlaneMesh
 var owner_line_material: StandardMaterial3D
@@ -127,6 +131,7 @@ func _ready() -> void:
  owner_line_material.albedo_color=Color("dddeda")
  _setup_battle_grid()
  get_viewport().size_changed.connect(_fit_top_view)
+ get_viewport().mouse_exited.connect(func():set_hover_card(INVALID))
  _setup_npc_space()
  _setup_garnet_cubes()
  _setup_distributors()
@@ -210,7 +215,7 @@ func clear_cards() -> void:
  set_hover_card(INVALID)
  for tween in animations:
   if tween.is_valid():tween.kill()
- animations.clear();set_process(false)
+ animations.clear();set_process(top_view)
  for holder in cards.values():holder.queue_free()
  cards.clear();hide_preview()
  for holder in mirror_cards.values():holder.queue_free()
@@ -327,6 +332,64 @@ func set_hover_card(cell: Vector2i) -> void:
  _set_card_brightness(hovered_cell,false)
  hovered_cell=cell
  _set_card_brightness(hovered_cell,true)
+ top_hover_elapsed=0.0
+ top_hover_revealed=false
+ if top_view:_apply_top_hover_scales()
+
+func update_top_hover(point: Vector2) -> void:
+ if not top_view or top_transitioning or card_focus_active or card_focus_returning:
+  set_hover_card(INVALID)
+  return
+ var hit_cell:=INVALID
+ if get_viewport().get_visible_rect().has_point(point):
+  var hit: Variant=Plane(Vector3.UP,0.065).intersects_ray(camera.project_ray_origin(point),camera.project_ray_normal(point))
+  if hit!=null:
+   # Keep the normal footprint clickable while shrinking; prefer card centers
+   # over enlarged neighbors so crossing between adjacent cards remains stable.
+   var nearest:=INF
+   for cell in cards:
+    var holder: Node3D=cards[cell]
+    var offset: Vector3=hit-holder.global_position
+    var extent:=CARD_METRES*Vector2(maxf(1.0,holder.scale.x),maxf(1.0,holder.scale.z))*0.5
+    if absf(offset.x)<=extent.x and absf(offset.z)<=extent.y and offset.length_squared()<nearest:
+     hit_cell=cell
+     nearest=offset.length_squared()
+ set_hover_card(hit_cell)
+
+func _process(delta: float) -> void:
+ if not top_view or hovered_cell==INVALID or top_hover_revealed:return
+ if not cards.has(hovered_cell):
+  set_hover_card(INVALID)
+  return
+ top_hover_elapsed+=delta
+ if top_hover_elapsed>=TOP_HOVER_DELAY:
+  top_hover_revealed=true
+  _apply_top_hover_scales()
+
+func _linked_targets(cell: Vector2i) -> Array[Vector2i]:
+ var targets: Array[Vector2i]=[]
+ if not cards.has(cell):return targets
+ var source: Node3D=cards[cell]
+ var id: String=str(source.get_meta("card_id"))
+ var definition: Dictionary=Catalog.back_card(id) if bool(source.get_meta("reverse",false)) else Catalog.card(id)
+ for direction in Directions.for_definition(definition):
+  var target: Vector2i=cell+Vector2i(Directions.OFFSETS[direction])
+  if cards.has(target) and _real_link_allowed(cell,target):targets.append(target)
+ return targets
+
+func _apply_top_hover_scales(instant: bool=false) -> void:
+ if top_hover_tween and top_hover_tween.is_valid():top_hover_tween.kill()
+ var active: bool=top_view and cards.has(hovered_cell)
+ var targets: Array[Vector2i]=[]
+ if active and top_hover_revealed:targets=_linked_targets(hovered_cell)
+ if not instant and not cards.is_empty():
+  top_hover_tween=create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+ for cell in cards:
+  var factor:=1.0
+  if active:factor=1.5 if cell==hovered_cell else (1.2 if cell in targets else 0.8)
+  var target_scale:=Vector3(factor,1.0,factor)
+  if instant:cards[cell].scale=target_scale
+  else:top_hover_tween.tween_property(cards[cell],"scale",target_scale,0.05 if reduced_motion else 0.12)
 
 func _set_card_brightness(cell: Vector2i, highlighted: bool) -> void:
  if not cards.has(cell) or str(cards[cell].get_meta("owner","player"))!="opponent":return
@@ -505,6 +568,8 @@ func _setup_npc_space() -> void:
  anchor.position=Vector3(0,0.003,OPPONENT_TABLE_Z*0.5)
  anchor.set_meta("reserved_size",Vector3(6.0,4.0,3.2))
  add_child(anchor)
+ var npc:=preload("res://scripts/temporary_npc_dodecahedron.gd").new()
+ npc.name="TemporaryNPC";anchor.add_child(npc)
 
 # Visual adjacency preview only; it never applies card effects.
 
@@ -532,6 +597,7 @@ func dismiss_card_focus() -> void:
  card_focus_tween.finished.connect(func():card_focus_returning=false)
 
 func click_influence(cell: Vector2i) -> void:
+ set_hover_card(INVALID)
  cancel_look_return()
  if placement_camera:placement_camera.restore()
  if card_focus_active:
@@ -585,7 +651,7 @@ func select_influence(cell: Vector2i, refresh_only: bool=false) -> void:
    var target: Vector2i=selected_cell+Vector2i(Directions.OFFSETS[direction])
    if Grid.contains(target):
     influence_range.append(target)
-   if cards.has(target) and _real_link_allowed(selected_cell,target):influenced_cells.append(target)
+  influenced_cells.assign(_linked_targets(selected_cell))
  for placed_cell in cards:
   for holder in [cards[placed_cell],mirror_cards[placed_cell]]:
    var overlay: MeshInstance3D=holder.get_node("InfluenceOverlay")
@@ -604,6 +670,7 @@ func set_top_view(enabled: bool, animate: bool=false) -> void:
  finish_top_transition()
  if placement_camera:placement_camera.restore()
  if top_view==enabled:return
+ set_hover_card(INVALID)
  restore_card_focus()
  var from_transform:=camera.transform
  var from_size:=camera.size
@@ -646,6 +713,8 @@ func set_top_view(enabled: bool, animate: bool=false) -> void:
    if is_instance_valid(node):node.visible=top_hidden[node]
   top_hidden.clear()
  top_view=enabled
+ set_process(enabled)
+ _apply_top_hover_scales(true)
  _refresh_battle_grid()
  hide_preview()
  if enabled:_fit_top_view()
@@ -732,7 +801,8 @@ func _show_influence_links() -> void:
    link.visible=not mirrored or not top_view
 
 func _setup_garnet_cubes() -> void:
- preload("res://scripts/table_decoration.gd").build_garnet_cubes(self)
+ var pile:=preload("res://scripts/cube_presentation.gd").new()
+ pile.name="GarnetCubes";add_child(pile)
 
 func _set_card_directions_visible(holder: Node3D, enabled: bool) -> void:
  for child in holder.get_children():
@@ -782,6 +852,7 @@ func _real_link_allowed(source_cell: Vector2i, target_cell: Vector2i) -> bool:
  return bool(link_eligibility.call(source_cell,target_cell)) if link_eligibility.is_valid() else true
 
 func refresh_link_rules() -> void:
+ if top_view and hovered_cell!=INVALID:_apply_top_hover_scales()
  if selected_cell!=INVALID:select_influence(selected_cell,true)
 
 func sync_investment_markers(records: Dictionary) -> void:
@@ -796,3 +867,34 @@ func sync_investment_markers(records: Dictionary) -> void:
     marker=Label3D.new();marker.name="InvestmentLabel";marker.position=Vector3(0,0.18,1.15);marker.rotation_degrees.x=-90
     marker.font_size=28;marker.pixel_size=0.008;marker.modulate=Color("b582eb");marker.outline_size=5;holder.add_child(marker)
    marker.text="◆".repeat(amount);marker.visible=amount>0
+
+# Match the gathered UI packet in screen space, then carry physical cards into the case.
+func store_hand_packet(packet: Array[Dictionary], quick: bool=false) -> void:
+ if packet.is_empty():return
+ var mouth: Node3D=get_node("Distributors/BlackMarket/CardEntry")
+ var holders: Array[Node3D]=[]
+ var motion:=create_tween().set_parallel(true)
+ for i in range(packet.size()):
+  var entry: Dictionary=packet[i]
+  var holder:=_make_card(str(entry.id),bool(entry.reverse),quick)
+  holders.append(holder)
+  holder.get_node("ContactShadow").hide()
+  _set_card_directions_visible(holder,false)
+  var point: Vector2=ui_stage.get_global_transform_with_canvas()*Vector2(entry.center)
+  var start:=camera.project_position(point,6.0)
+  var right_point: Vector2=ui_stage.get_global_transform_with_canvas()*(Vector2(entry.center)+Vector2(158*0.84,0))
+  var factor:float=start.distance_to(camera.project_position(right_point,6.0))/CARD_METRES.x
+  var facing:=Basis(camera.global_basis.x,camera.global_basis.z,-camera.global_basis.y).get_rotation_quaternion()
+  holder.global_position=start;holder.quaternion=facing;holder.scale=Vector3.ONE*factor
+  var finish:=mouth.global_position+Vector3(0,0.025*i,0)
+  var duration:float=0.16 if quick else 0.55
+  var delay:float=i*(0.008 if quick else 0.022)
+  motion.tween_method(func(t: float):
+   holder.global_position=start.lerp(finish,t)+Vector3.UP*sin(PI*t)*0.7
+   holder.quaternion=facing.slerp(Quaternion.IDENTITY,t)
+   holder.scale=Vector3.ONE*lerpf(factor,1.0,t)
+  ,0.0,1.0,duration).set_delay(delay).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+  motion.tween_property(holder,"global_position",finish-Vector3(0,1.12,0),0.08 if quick else 0.18).set_delay(delay+duration)
+ _track(motion)
+ await motion.finished
+ for holder in holders:holder.queue_free()

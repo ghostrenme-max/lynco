@@ -23,7 +23,7 @@ func run() -> void:
  ui._test_drag(view.rest_position+ui.Card.CARD_SIZE*0.5,t.screen_position(Vector2i(3,2)),false)
  check(ui.drag_uid==uid,"real held-button input starts drag")
  await create_timer(0.5).timeout
- check(cam.active and (original.origin-t.camera.position).dot(original.basis.z)>4.0,"stronger drag zoom advances over four units")
+ check(cam.active and (original.origin-t.camera.position).dot(original.basis.z)>7.0,"stronger drag zoom advances over seven units")
  for other_uid in ui.views:
   if other_uid!=uid:
    var other=ui.views[other_uid]

@@ -34,7 +34,7 @@ func run() -> void:
   var pile: Control=ui.pile_views[i]
   check(pile.size.is_equal_approx(Vector2(124,197.8)),"pile height increased fifteen percent only")
   var face: TextureRect=pile.get_child(pile.get_child_count()-1)
-  check(face.texture==ui.textures["back_white" if i==0 else "back_black"],"original logo textures retained")
+  check(face.texture==ui.textures["pile_left" if i==0 else "pile_right"],"requested left and right pile logos assigned")
   check(is_equal_approx(face.size.y/float(face.material.get_shader_parameter("logo_height_scale")),172.0),"logo height preserved without stretching")
  check(float(ui.Card.BACK_MATERIAL.get_shader_parameter("logo_height_scale"))==1.0,"hand and table logo materials untouched")
  for quick in [false,true]:

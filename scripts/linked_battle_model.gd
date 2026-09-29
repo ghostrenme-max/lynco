@@ -1,10 +1,12 @@
 extends "res://scripts/table_battle_model.gd"
 ## Each directed edge is evaluated once per event; effects never recursively emit events.
+const CubeTest = preload("res://scripts/temporary_cube_test.gd")
 const Rules = preload("res://scripts/linked_rules.gd")
 # Declare this dependency locally so editor reloads do not rely on inherited aliases.
 const BoardGeometry = preload("res://scripts/board_geometry.gd")
 var rules: Dictionary={}
 var definitions: Dictionary={}
+var cube_changes: Array[int]=[]
 var cubes := {"player":0,"opponent":0}
 var performance := {"player":0,"opponent":0}
 var cell_map: Dictionary={}
@@ -18,6 +20,7 @@ var edge_checks := 0
 
 func reset(new_seed: int) -> void:
  super.reset(new_seed)
+ cube_changes.clear()
  Rules.ensure();rules=Rules.settings.duplicate(true);definitions=Rules.cards.duplicate(true)
  cubes={"player":int(rules.starting_cubes),"opponent":int(rules.starting_cubes)}
  performance={"player":0,"opponent":0};cell_map.clear();events.clear();event_drawn.clear();ending_reason="";edge_checks=0;ai_running=false
@@ -33,7 +36,9 @@ func reset(new_seed: int) -> void:
  _scores()
 
 func fill_hand() -> Dictionary:
- return {"drawn":draw_cards(maxi(0,5-hand.size())),"reason":""}
+ var drawn:=draw_cards(maxi(0,5-hand.size()))
+ CubeTest.prepare_hand(self,drawn)
+ return {"drawn":drawn,"reason":""}
 
 func free_cell(cell: Vector2i) -> bool:
  return BoardGeometry.contains(cell) and not cell_map.has(cell)
@@ -47,6 +52,7 @@ func unavailable_reason(uid: int) -> String:
  if placed.size()>=CAPACITY:return "테이블이 가득 찼습니다"
  var index:=find_card(uid)
  if index<0:return "손에 없는 카드입니다"
+ if cubes.player<CubeTest.cost(hand[index]):return "큐브가 부족합니다 (임시 카드 비용 %d)" % CubeTest.cost(hand[index])
  if is_concealed(uid):return ""
  if int(definitions[hand[index].id].cost)>energy:return "행동력이 부족합니다"
  return ""
@@ -61,6 +67,7 @@ func play_at(uid: int, cell: Vector2i) -> Dictionary:
  events.clear();event_drawn.clear()
  var index:=find_card(uid)
  var entry: Dictionary=hand[index];hand.remove_at(index)
+ change_cubes("player",-CubeTest.cost(entry))
  var reverse:=bool(entry.get("concealed",false));entry.erase("concealed")
  var record:=_place(entry,"player",cell,reverse)
  _finish_if_needed(false);_scores()
@@ -85,7 +92,7 @@ func _effect(side: String, kind: String, amount: int, source: Vector2i, target: 
  if amount<=0 or kind=="none":return
  match kind:
   "score":performance[side]+=amount
-  "cubes":cubes[side]+=amount
+  "cubes":change_cubes(side,amount)
   "energy":
    if side=="player":
     if ai_running:pending_energy.player+=amount
@@ -145,7 +152,7 @@ func invest(cell: Vector2i, side: String="player") -> Dictionary:
  events.clear();event_drawn.clear()
  var r: Dictionary=cell_map[cell]
  var amount:=int(definitions[r.entry.id].investment_cost)
- cubes[side]-=amount;r.invested=amount;r.invested_turn=turn;r.last_invest_turn=turn
+ change_cubes(side,-amount);r.invested=amount;r.invested_turn=turn;r.last_invest_turn=turn
  _outgoing(r,"on_invest")
  _scores()
  return {"ok":true,"reason":"큐브 %d개 투자 · 연결 추가 효과 활성" % amount,"drawn":event_drawn.duplicate(),"events":events.duplicate(true)}
@@ -156,7 +163,7 @@ func recover(cell: Vector2i, side: String="player") -> Dictionary:
  var r: Dictionary=cell_map[cell]
  var fee:=mini(int(r.invested),int(rules.recover_fee))
  var returned:=int(r.invested)-fee
- cubes[side]+=returned;r.invested=0;_scores()
+ change_cubes(side,returned);r.invested=0;_scores()
  return {"ok":true,"reason":"큐브 %d개 회수 · 회수 비용 %d" % [returned,fee],"drawn":[],"events":[]}
 
 func invested_total(side: String) -> int:
@@ -211,7 +218,7 @@ func end_turn() -> Dictionary:
  for entry in hand:entry.erase("concealed")
  discard.append_array(hand);hand.clear()
  _draw_enemy(maxi(0,5-opponent_hand.size()));enemy_energy=int(rules.energy)+int(pending_energy.opponent);pending_energy.opponent=0
- if turn>1:cubes.opponent+=int(rules.turn_cubes)
+ if turn>1:change_cubes("opponent",int(rules.turn_cubes))
  _start_links("opponent")
  var moves: Array=[]
  var count:=opponent_hand.size()
@@ -240,7 +247,7 @@ func end_turn() -> Dictionary:
  _finish_if_needed(true)
  if not finished:
   ai_running=false
-  turn+=1;energy=int(rules.energy)+int(pending_energy.player);pending_energy.player=0;cubes.player+=int(rules.turn_cubes);observed=false;block=0
+  turn+=1;energy=int(rules.energy)+int(pending_energy.player);pending_energy.player=0;change_cubes("player",int(rules.turn_cubes));observed=false;block=0
   event_drawn.clear();event_drawn.append_array(hand);event_drawn.append_array(fill_hand().drawn);_start_links("player")
  _scores();ai_running=false
  return {"ok":true,"damage":0,"absorbed":0,"placements":moves,"hand_count":count,"drawn":[] if finished else event_drawn.duplicate()}
@@ -274,3 +281,8 @@ func link_allowed_at(source_cell: Vector2i, target_cell: Vector2i) -> bool:
  var source: Dictionary=cell_map[source_cell]
  var trigger: String=definitions[source.entry.id].link_trigger
  return edge_allowed(source,cell_map[target_cell],"on_place" if trigger=="any" else trigger)
+
+func change_cubes(side: String, amount: int) -> void:
+ if amount==0:return
+ cubes[side]+=amount
+ if side=="player":cube_changes.append(amount)

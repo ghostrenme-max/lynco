@@ -93,6 +93,21 @@ static func build_distributors(parent: Node3D, opponent_table_z: float) -> Stand
   var shell:=StandardMaterial3D.new()
   shell.albedo_color=Color("dddcd1") if side<0 else Color("292c2d")
   shell.roughness=0.3; shell.metallic=0.2
+  if side>0:
+   machine.position.z=-3.0
+   # Open rectangular deck case; the original node remains the interaction target.
+   for part in [Vector4(0,0.08,0,0),Vector4(-0.88,0.68,0,1),Vector4(0.88,0.68,0,1),Vector4(0,0.68,-1.2,2),Vector4(0,0.68,1.2,2)]:
+    var wall:=MeshInstance3D.new()
+    var box:=BoxMesh.new()
+    box.size=Vector3(1.86,0.16,2.5) if part.w==0 else (Vector3(0.1,1.2,2.5) if part.w==1 else Vector3(1.86,1.2,0.1))
+    wall.mesh=box;wall.material_override=shell;wall.position=Vector3(part.x,part.y,part.z)
+    machine.add_child(wall)
+   var mouth:=Marker3D.new();mouth.name="CardEntry";mouth.position=Vector3(0,1.5,0);machine.add_child(mouth)
+   var case_glow_material:=StandardMaterial3D.new();case_glow_material.albedo_color=Color("181a19")
+   black_market_glow=case_glow_material
+   var case_light:=OmniLight3D.new();case_light.name="ActiveLight";case_light.position=Vector3(0,1.5,0)
+   case_light.light_color=Color("f12c40");case_light.light_energy=1.2;case_light.omni_range=2.8;case_light.hide();machine.add_child(case_light)
+   continue
   var body:=MeshInstance3D.new()
   var cylinder:=CylinderMesh.new()
   cylinder.top_radius=0.66;cylinder.bottom_radius=0.72;cylinder.height=1.55
