@@ -1,6 +1,8 @@
 extends "res://scripts/table_battle_model.gd"
 ## Each directed edge is evaluated once per event; effects never recursively emit events.
 const Rules = preload("res://scripts/linked_rules.gd")
+# Declare this dependency locally so editor reloads do not rely on inherited aliases.
+const BoardGeometry = preload("res://scripts/board_geometry.gd")
 var rules: Dictionary={}
 var definitions: Dictionary={}
 var cubes := {"player":0,"opponent":0}
@@ -34,10 +36,10 @@ func fill_hand() -> Dictionary:
  return {"drawn":draw_cards(maxi(0,5-hand.size())),"reason":""}
 
 func free_cell(cell: Vector2i) -> bool:
- return Grid.contains(cell) and not cell_map.has(cell)
+ return BoardGeometry.contains(cell) and not cell_map.has(cell)
 
 func next_cell() -> Vector2i:
- return Grid.first_empty(cell_map)
+ return BoardGeometry.first_empty(cell_map)
 
 func unavailable_reason(uid: int) -> String:
  if finished:return "전투가 종료되었습니다"
