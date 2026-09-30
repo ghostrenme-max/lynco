@@ -21,8 +21,8 @@ func run() -> void:
  check(not ui.hand_label.get_rect().intersects(ui.garnet_label.get_rect()),"resource counts do not overlap")
  check(ui.end_button.get_parent()==ui.turn_board,"end turn in board")
  check(ui.hud_values.energy.text=="%02d" % ui.model.energy,"large remaining energy uses two digits")
- check(ui.hud_values.energy.get_theme_font_size("font_size")==78,"remaining energy dominates panel")
- check(ui.turn_board.size==Vector2(780,216),"reference panel height")
+ check(ui.hud_values.energy.get_theme_font_size("font_size")==38,"energy is the only top-left numeric resource")
+ check(ui.turn_board.size==Vector2(720,180),"compact centered situation HUD")
  check(not ui.hud_values.energy.get_rect().intersects(ui.end_button.get_rect()),"energy and end button do not overlap")
  for label in [ui.hand_hint,ui.deck_label,ui.discard_label,ui.exhaust_label,ui.performance_label]:
   check(not label.visible,"bottom explanations hidden")
@@ -34,7 +34,7 @@ func run() -> void:
   check(particles.gravity==Vector3.ZERO and particles.spread==180.0,"radial core emission")
   check(particles.emission_sphere_radius+particles.initial_velocity_max*particles.lifetime<0.4,"travel stays inside cube")
   check(particles.color_ramp.sample(1.0).a==0.0,"particles disappear at end of short travel")
- check(ui.turn_track.occupied==ui.model.placed.size(),"progress from model")
+ check(ui.turn_track.occupied==ui.model.turn-1,"progress from model")
  check(not ui.menu_button.is_visible_in_tree() and ui.menu_button.get_parent()==ui.help_panel,"return arrow absent from battlefield and available in help")
  check(ui.table.COLS==6 and ui.table.ROWS==5 and ui.Model.CAPACITY==30,"6 by 5 wide playable board")
  check(not ui.table.black_market_open and not ui.table.get_node("Distributors/BlackMarket/ActiveLight").visible,"black market idle")
@@ -59,7 +59,7 @@ func run() -> void:
  await process_frame
  check(ui.busy,"end turn actual click")
  while ui.busy:await process_frame
- check(ui.model.turn>turn and ui.turn_track.occupied==ui.model.placed.size(),"turn and progress updated")
+ check(ui.model.turn>turn and ui.turn_track.occupied==ui.model.turn-1,"turn and progress updated")
  await create_timer(2).timeout
  await capture("hud_layout_played")
  ui.table.set_top_view(true)

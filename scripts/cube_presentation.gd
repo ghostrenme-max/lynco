@@ -32,12 +32,9 @@ func _visual(parent: Node3D) -> void:
  parent.add_child(preload("res://scripts/garnet_cube_visual.gd").create_visual(EDGE))
 
 func _spawn_cube(at: Vector3) -> RigidBody3D:
- var cube:=RigidBody3D.new();cube.collision_layer=8;cube.collision_mask=8
- cube.mass=0.2;cube.continuous_cd=true;cube.linear_damp=0.6;cube.angular_damp=0.8
- var physics:=PhysicsMaterial.new();physics.friction=0.8;physics.bounce=0.18;cube.physics_material_override=physics
+ var cube:=preload("res://scripts/garnet_cube_visual.gd").create_body(EDGE)
  add_child(cube);cube.position=at
- var collision:=CollisionShape3D.new();var shape:=BoxShape3D.new();shape.size=Vector3.ONE*EDGE;collision.shape=shape;cube.add_child(collision)
- _visual(cube);bodies.append(cube);return cube
+ bodies.append(cube);return cube
 
 func reset_count(count: int) -> void:
  for cube in bodies:remove_child(cube);cube.queue_free()

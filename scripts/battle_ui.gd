@@ -45,6 +45,8 @@ var opponent_vignette: TextureRect
 var model := Model.new()
 var linked_panel: Panel
 var table: LyncoTableView
+var drag_opacity_motion: Tween
+var drag_placement_overlay: Control
 var drag_uid: int = -1
 var press_uid: int = -1
 var looking: bool = false
@@ -126,8 +128,17 @@ var _verification_runner: RefCounted
 
 var inspector_score: Control
 var table_status: Label
+var capacity_hint: PanelContainer
 var garnet_label: Label
 var turn_board: Panel
+var round_badge: Label
+var remaining_label: Label
+var situation_symbols: Control
+var seal_motion: Tween
+var round_label_motion: Tween
+var remaining_motion: Tween
+var opponent_turn_active := false
+var ending_turn_number := -1
 var hud_values: Dictionary = {}
 var turn_motion: Tween
 var turn_track: Control
@@ -247,22 +258,38 @@ func _build_ui() -> void:
  opponent_vignette.texture=shade_texture;opponent_vignette.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
  opponent_vignette.mouse_filter=Control.MOUSE_FILTER_IGNORE;opponent_vignette.z_index=-1
  opponent_vignette.modulate.a=0.0;stage.add_child(opponent_vignette)
- turn_board=_panel(stage,Vector2(790,20),Vector2(780,216),Color("171a18"),20)
- turn_board.mouse_filter=Control.MOUSE_FILTER_STOP
- turn_caption=_label(turn_board,"",Vector2(24,12),Vector2(560,30),20,Color("eeeee5"))
- table_status=_label(turn_board,"",Vector2(20,174),Vector2(470,32),20,Color.WHITE)
- _label(table_status,"테이블 배치 :",Vector2.ZERO,Vector2(130,32),20,Color.WHITE)
- hud_values.placed=_label(table_status,"",Vector2(136,0),Vector2(65,32),20,Color.WHITE)
- hud_values.energy=_label(turn_board,"",Vector2(632,52),Vector2(128,100),78,Color.WHITE)
+ turn_board=_panel(stage,Vector2(440,20),Vector2(720,180),Color.TRANSPARENT,0)
+ turn_board.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ situation_symbols=preload("res://scripts/situation_symbols.gd").new()
+ situation_symbols.size=turn_board.size
+ situation_symbols.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ turn_board.add_child(situation_symbols)
+ round_badge=_label(turn_board,"R1",Vector2(332,19),Vector2(56,42),24,Color("fff9ee"))
+ round_badge.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ round_badge.tooltip_text="현재 라운드"
+ turn_caption=_label(turn_board,"",Vector2(282,85),Vector2(156,28),19,Color("fff9ee"))
+ turn_caption.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ table_status=_label(turn_board,"",Vector2(55,44),Vector2(58,42),32,Color.WHITE)
+ hud_values.placed=_label(table_status,"",Vector2.ZERO,Vector2(58,42),32,Color.WHITE)
+ table_status.hide()
+ capacity_hint=preload("res://scripts/table_capacity_hint.gd").new()
+ capacity_hint.ui=self
+ stage.get_parent().add_child(capacity_hint)
+ table_status.tooltip_text="테이블에 배치된 카드 합계 · 나 + 상대"
+ hud_values.energy=_label(turn_board,"",Vector2(67,42),Vector2(91,48),38,YELLOW)
+ _label(turn_board,"행동력",Vector2(79,19),Vector2(74,25),17,Color("d8d2c8"))
  hud_values.energy.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
- hud_values.energy.add_theme_constant_override("outline_size",3)
- hud_values.energy.add_theme_color_override("font_outline_color",Color.WHITE)
- hud_values.energy.tooltip_text="내 턴에 남은 행동력"
+ hud_values.energy.tooltip_text="카드 사용에 필요한 남은 행동력"
+ remaining_label=_label(turn_board,"",Vector2(518,37),Vector2(80,48),36,Color.WHITE)
+ remaining_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ _label(turn_board,"남은 턴",Vector2(529,19),Vector2(75,25),17,Color("c7b493"))
+
+ remaining_label.tooltip_text="현재 라운드를 포함한 남은 턴 수"
  hud_values.player_score=_label(table_status,"",Vector2.ZERO,Vector2(48,25),16,Color.WHITE)
  hud_values.opponent_score=_label(table_status,"",Vector2.ZERO,Vector2(48,25),16,Color.WHITE)
  hud_values.player_score.hide();hud_values.opponent_score.hide()
  turn_track=preload("res://scripts/turn_track.gd").new()
- turn_track.position=Vector2(24,44);turn_track.size=Vector2(570,42)
+ turn_track.position=Vector2(12,128);turn_track.size=Vector2(708,52)
  turn_track.mouse_filter=Control.MOUSE_FILTER_IGNORE
  turn_board.add_child(turn_track)
  var garnet_icon:=Polygon2D.new()
@@ -308,8 +335,20 @@ func _build_ui() -> void:
  menu_button.tooltip_text = "현재 전투를 종료합니다. 진행은 저장되지 않습니다."
  menu_button.pressed.connect(_return_to_main)
 
- end_button = _button(turn_board,"턴 종료",Vector2(640,171),Vector2(118,37),true)
- end_button.add_theme_font_size_override("font_size",20)
+ end_button = _button(turn_board,"◆\n턴 종료",Vector2(624,17),Vector2(76,76),true)
+ end_button.tooltip_text="턴 종료 · Space"
+ end_button.add_theme_font_size_override("font_size",16)
+ for state in ["font_color","font_hover_color","font_pressed_color"]:end_button.add_theme_color_override(state,Color("f5e7c8"))
+ end_button.add_theme_stylebox_override("normal",_style(Color("582633"),38,Color("b69559"),2))
+ end_button.add_theme_stylebox_override("hover",_style(Color("773649"),38,Color("dec38a"),2))
+ end_button.add_theme_stylebox_override("pressed",_style(Color("351923"),38,Color("f5e7c8"),2))
+ end_button.add_theme_stylebox_override("disabled",_style(Color("282025"),38,Color("7c694e"),1))
+ end_button.add_theme_stylebox_override("focus",_style(Color.TRANSPARENT,38,Color("f5d335"),2))
+ end_button.pivot_offset=end_button.size*0.5
+ end_button.mouse_entered.connect(func():_animate_seal(1.045))
+ end_button.mouse_exited.connect(func():_animate_seal(1.0))
+ end_button.button_down.connect(func():_animate_seal(0.93))
+ end_button.button_up.connect(func():_animate_seal(1.0))
  end_button.pressed.connect(_end_turn)
 
 
@@ -323,6 +362,10 @@ func _build_ui() -> void:
  hand_hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
  hand_layer = Control.new(); hand_layer.size=Vector2(1600,900); hand_layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
  stage.add_child(hand_layer)
+ drag_placement_overlay=preload("res://scripts/drag_placement_overlay.gd").new()
+ drag_placement_overlay.ui=self
+ drag_placement_overlay.size=Vector2(1600,900)
+ stage.add_child(drag_placement_overlay)
  _build_pile(DECK_ORIGIN, false)
  _build_pile(DISCARD_ORIGIN, true)
  deck_label = _label(stage,"덱 18",Vector2(45,844),Vector2(142,26),16)
@@ -655,11 +698,23 @@ func _activate_card(uid: int, cell: Vector2i = Table.INVALID) -> void:
  await _animate_draw(result.drawn)
  busy=false; _sync_ui(); _check_end()
 
+func _animate_seal(target: float) -> void:
+ if seal_motion and seal_motion.is_valid():seal_motion.kill()
+ if reduced_motion or end_button.disabled:
+  end_button.scale=Vector2.ONE
+  return
+ seal_motion=create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+ seal_motion.tween_property(end_button,"scale",Vector2.ONE*target,0.22 if target>=1.0 else 0.09)
+
 func _end_turn() -> void:
  if inspector_open or looking or busy or drag_uid>=0 or model.finished or help_panel.visible:return
  busy=true;selected_uid=-1
+ ending_turn_number=model.turn
  _clear_hand_focus()
  _sync_ui()
+ # Complete the consumed-turn burst before mutating the battle or moving cards.
+ while situation_symbols.is_burst_active():
+  await get_tree().process_frame
  if not views.is_empty():
   discard_phase="gather"
   var packet: Array[Dictionary]=[]
@@ -684,7 +739,9 @@ func _end_turn() -> void:
  discard_phase="idle"
  for view in views.values():view.queue_free()
  views.clear()
+ opponent_turn_active=true
  var result: Dictionary=model.end_turn()
+ _sync_ui()
  table.show_opponent_hand(int(result.hand_count))
  _hide_hover_direction();camera_keys.clear()
  _set_piles_retracted(true)
@@ -698,6 +755,8 @@ func _end_turn() -> void:
  _set_piles_retracted(false)
  await table.set_opponent_view(false,reduced_motion)
  await _animate_cube_changes()
+ opponent_turn_active=false
+ ending_turn_number=-1
  if not model.finished:table.show_opponent_hand(5)
  _sync_ui()
  _toast("상대 %d장 배치 · %s" % [result.placements.size(),"판정" if model.finished else "내 차례"])
@@ -718,6 +777,10 @@ func _set_hud_value(key: String, value: int) -> void:
  label.text=("%02d" % value) if key=="energy" else str(value)
 
 func _sync_ui() -> void:
+ var opponent_pile=table.get_node_or_null("OpponentCubes")
+ if is_instance_valid(opponent_pile):opponent_pile.set_count(int(model.cubes.opponent))
+ var turn_pointer=table.get_node_or_null("TheatreRoom/TurnPointerDummy")
+ if is_instance_valid(turn_pointer):turn_pointer.set_turn(opponent_turn_active,reduced_motion)
  _sync_investment_markers()
  if is_instance_valid(linked_panel):linked_panel.refresh()
  if is_instance_valid(table_status):
@@ -725,16 +788,30 @@ func _sync_ui() -> void:
   _set_hud_value("player_score",model.player_score)
   _set_hud_value("opponent_score",model.opponent_score)
   _set_hud_value("placed",model.placed.size())
-  var previous_caption: String=turn_caption.text
-  turn_caption.text="%02d 턴   ·   %s" % [model.turn,"판정 완료" if model.finished else ("진행 중" if busy else "내 차례")]
-  if previous_caption!=turn_caption.text:
-   if turn_motion and turn_motion.is_valid():turn_motion.kill()
-   turn_caption.position=Vector2(28,14)
-   if not reduced_motion and not previous_caption.is_empty():
-    turn_caption.position.x+=10
-    turn_motion=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-    turn_motion.tween_property(turn_caption,"position:x",28.0,0.2)
-  turn_track.set_progress(model.placed.size(),Model.CAPACITY)
+  turn_caption.text="◆ 판정 완료" if model.finished else ("◇ 상대 차례" if opponent_turn_active else "◆ 내 차례")
+  turn_caption.modulate=Color("ffbb80") if opponent_turn_active else Color.WHITE
+  var display_turn: int=model.turn-1 if opponent_turn_active and not model.finished else model.turn
+  display_turn=maxi(1,display_turn)
+  var remaining: int=0 if model.finished else maxi(0,int(model.rules.max_turns)-display_turn+1)
+  if ending_turn_number==display_turn and not model.finished:remaining=maxi(0,remaining-1)
+  if situation_symbols.round_number>=0 and situation_symbols.round_number!=display_turn and not reduced_motion:
+   if round_label_motion and round_label_motion.is_valid():round_label_motion.kill()
+   round_badge.pivot_offset=round_badge.size*0.5
+   round_badge.scale=Vector2.ONE*0.88
+   round_label_motion=create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+   round_label_motion.tween_property(round_badge,"scale",Vector2.ONE,0.38)
+  if situation_symbols.remaining!=remaining and not reduced_motion:
+   if remaining_motion and remaining_motion.is_valid():remaining_motion.kill()
+   remaining_label.pivot_offset=remaining_label.size*0.5
+   remaining_label.scale=Vector2.ONE*1.13
+   remaining_motion=create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+   remaining_motion.tween_property(remaining_label,"scale",Vector2.ONE,0.40)
+  round_badge.text="R%d" % display_turn
+  round_badge.tooltip_text="현재 %d / 최대 %d라운드" % [display_turn,int(model.rules.max_turns)]
+  remaining_label.text="%02d" % remaining
+  situation_symbols.set_turns(remaining,int(model.rules.max_turns))
+  situation_symbols.set_round(display_turn)
+  turn_track.set_progress(display_turn-1,int(model.rules.max_turns))
   garnet_label.text=str(model.cubes.player)
  if busy or model.finished: _hide_hover_direction()
  deck_label.text="덱  %d" % model.deck.size()
@@ -747,7 +824,8 @@ func _sync_ui() -> void:
  shift_button.disabled=busy or model.finished or model.hand.is_empty()
  menu_button.disabled=busy or leaving_battle
  end_button.disabled=busy or model.finished
- end_button.text="진행 중…" if busy else "턴 종료"
+ if end_button.disabled:_animate_seal(1.0)
+ end_button.text="◆\n턴 종료"
  reset_button.disabled=busy;draw_button.disabled=busy or model.finished or model.hand.size()>=int(Catalog.CHARACTER.hand_limit)
  seed_box.editable=not busy
  for uid in views:
@@ -870,7 +948,7 @@ func _input(event: InputEvent) -> void:
   table.return_look_after_release()
   get_viewport().set_input_as_handled()
   return
- if event is InputEventMouse and not inspector_open and not help_panel.visible and not is_instance_valid(inventory_layer) and is_instance_valid(linked_panel) and linked_panel.is_visible_in_tree() and linked_panel.get_global_rect().has_point(event.position):
+ if event is InputEventMouse and not inspector_open and not help_panel.visible and not is_instance_valid(inventory_layer) and is_instance_valid(linked_panel) and linked_panel.contains_ui(event.position):
   if event is InputEventMouseButton and not event.pressed and drag_uid>=0:
    _cancel_drag()
   return
@@ -1025,19 +1103,28 @@ func _input(event: InputEvent) -> void:
    var view:LyncoCardView=views[drag_uid]
    view.stop_motion();view.locked=true;view.z_index=150
    view.rotation=0;view.scale=Vector2.ONE*Card.HOVER_SCALE
+   if drag_opacity_motion and drag_opacity_motion.is_valid():drag_opacity_motion.kill()
+   if reduced_motion:view.modulate.a=0.55
+   else:
+    drag_opacity_motion=create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+    drag_opacity_motion.tween_property(view,"modulate:a",0.55,0.10)
    _inspect(drag_uid)
   if drag_uid>=0:
    var view:LyncoCardView=views[drag_uid]
-   var target: Vector2=point-Vector2(Card.CARD_SIZE.x*0.5,Card.CARD_SIZE.y*0.9)
+   var target: Vector2=Vector2(clampf(point.x+32,8,1600-Card.CARD_SIZE.x*Card.HOVER_SCALE-8),clampf(point.y-Card.CARD_SIZE.y*0.82,8,900-Card.CARD_SIZE.y*Card.HOVER_SCALE-8))
    view.rotation=clampf((target.x-view.position.x)*0.0012,-0.075,0.075) if not reduced_motion else 0.0
    view.position=target
+   drag_placement_overlay.pointer=point
    var cell: Vector2i=table.preview(point,model.unavailable_reason(drag_uid).is_empty())
+   table.hint_material.set_shader_parameter("tint",Color.TRANSPARENT)
    if cell!=Table.INVALID and table.preview_allowed and not reduced_motion:
     var snap: Vector2=table.screen_position(cell)
     if point.distance_to(snap)<45:view.position+=0.22*(snap-point)
    get_viewport().set_input_as_handled()
 
 func _cancel_drag() -> void:
+ if drag_opacity_motion and drag_opacity_motion.is_valid():drag_opacity_motion.kill()
+ if is_instance_valid(drag_placement_overlay):drag_placement_overlay.hide()
  if table and table.placement_camera:table.placement_camera.restore()
  for hand_view in views.values():
   if hand_view.drag_retracted:
@@ -1046,7 +1133,7 @@ func _cancel_drag() -> void:
  press_uid=-1
  if drag_uid>=0 and views.has(drag_uid):
   var view:LyncoCardView=views[drag_uid]
-  view.locked=false;view.update_pose()
+  view.modulate.a=1.0;view.locked=false;view.update_pose()
  drag_uid=-1
  if table:table.hide_preview()
 
@@ -1318,6 +1405,11 @@ func _hover_placed_direction(point: Vector2) -> void:
 func _set_reduced_motion(value: bool) -> void:
  reduced_motion=value
  preload("res://scripts/rolling_number_label.gd").reduced_motion=value
+ situation_symbols.set_reduced_motion(value)
+ if value:
+  for motion in [seal_motion,round_label_motion,remaining_motion]:
+   if motion and motion.is_valid():motion.kill()
+  for item in [end_button,round_badge,remaining_label]:item.scale=Vector2.ONE
  turn_track.reduced_motion=value
  turn_track.queue_redraw()
  table.reduced_motion=value
@@ -1327,7 +1419,7 @@ func _set_reduced_motion(value: bool) -> void:
   if not view.locked:view.update_pose()
  for label in get_tree().get_nodes_in_group("rolling_number_labels"):label.finish_rolls()
  if turn_motion and turn_motion.is_valid():turn_motion.kill()
- turn_caption.position=Vector2(28,14)
+ turn_caption.position=Vector2(282,85)
  hover_direction.set_reduced_motion(value)
  inspector_diagram.set_reduced_motion(value)
  table.direction_material.set_shader_parameter("reduced_motion",value)

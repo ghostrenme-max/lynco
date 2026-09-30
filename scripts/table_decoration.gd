@@ -94,7 +94,7 @@ static func build_distributors(parent: Node3D, opponent_table_z: float) -> Stand
   shell.albedo_color=Color("dddcd1") if side<0 else Color("292c2d")
   shell.roughness=0.3; shell.metallic=0.2
   if side>0:
-   machine.position.z=-3.0
+   machine.position.z=1.5
    # Open rectangular deck case; the original node remains the interaction target.
    for part in [Vector4(0,0.08,0,0),Vector4(-0.88,0.68,0,1),Vector4(0.88,0.68,0,1),Vector4(0,0.68,-1.2,2),Vector4(0,0.68,1.2,2)]:
     var wall:=MeshInstance3D.new()

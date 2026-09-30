@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode blend_mix, cull_back;
+uniform vec3 core_glow_color : source_color = vec3(0.28,0.085,0.62);
 varying vec3 object_position;
 varying vec3 object_normal;
 void vertex() {
@@ -19,7 +20,7 @@ void fragment() {
  METALLIC = 0.0;
  ROUGHNESS = 0.13;
  SPECULAR = 0.7;
- EMISSION = vec3(0.28,0.085,0.62)*transmission*illumination
+ EMISSION = core_glow_color*transmission*illumination
           + vec3(0.22,0.20,0.28)*reflection*0.28;
  ALPHA = 0.48 + fresnel*0.10;
 }

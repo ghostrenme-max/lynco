@@ -25,6 +25,12 @@ static func build(world: Node3D) -> void:
   candle.omni_attenuation=1.5;candle.shadow_enabled=false;room.add_child(candle)
   candle_prop.set_script(preload("res://scripts/candle_animation.gd"))
   candle_prop.setup(candle,0.0 if side==-1 else 4.17)
+ var turn_pointer:=preload("res://scripts/turn_pointer_dummy.gd").new()
+ turn_pointer.name="TurnPointerDummy"
+ turn_pointer.position=Vector3(9.7,0.0,-5.3)
+ turn_pointer.rotation.y=-PI*0.5
+ turn_pointer.scale=Vector3.ONE*1.15
+ room.add_child(turn_pointer)
  var env: Environment=world.get_node("Environment").environment
  env.background_color=Color("080709")
  env.ambient_light_color=Color("b5a99a");env.ambient_light_energy=0.09

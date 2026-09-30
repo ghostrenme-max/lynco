@@ -134,6 +134,8 @@ func _ready() -> void:
  get_viewport().mouse_exited.connect(func():set_hover_card(INVALID))
  _setup_npc_space()
  _setup_garnet_cubes()
+ var opponent_pile:=preload("res://scripts/opponent_cube_pile.gd").new()
+ opponent_pile.name="OpponentCubes";add_child(opponent_pile)
  _setup_distributors()
  preload("res://scripts/theatre_room.gd").build(self)
  set_process(false)
@@ -693,7 +695,7 @@ func set_top_view(enabled: bool, animate: bool=false) -> void:
   felt_board.uv1_scale*=Vector3(10,10,1)
   $Table/Tabletop.material_override=felt_board
   camera.rotation=Vector3(-PI*0.5,0,0)
-  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$NPCAnchor,$GarnetCubes,$Distributors,$TheatreRoom,$Tablecloths]:
+  for node in [$OpponentTable,$OpponentHand,$DummyProps,$Floor,$NPCAnchor,$GarnetCubes,$OpponentCubes,$Distributors,$TheatreRoom,$Tablecloths]:
    top_hidden[node]=node.visible
    node.hide()
   for link in influence_links:
@@ -866,7 +868,7 @@ func sync_investment_markers(records: Dictionary) -> void:
     if amount==0:continue
     marker=Label3D.new();marker.name="InvestmentLabel";marker.position=Vector3(0,0.18,1.15);marker.rotation_degrees.x=-90
     marker.font_size=28;marker.pixel_size=0.008;marker.modulate=Color("b582eb");marker.outline_size=5;holder.add_child(marker)
-   marker.text="◆".repeat(amount);marker.visible=amount>0
+   marker.text="◆ %d" % amount;marker.visible=amount>0
 
 # Match the gathered UI packet in screen space, then carry physical cards into the case.
 func store_hand_packet(packet: Array[Dictionary], quick: bool=false) -> void:

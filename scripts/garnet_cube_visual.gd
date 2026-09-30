@@ -3,11 +3,14 @@ extends RefCounted
 static var shared_mesh: ArrayMesh
 static var shared_material: ShaderMaterial
 
-static func create_visual(size: float) -> MeshInstance3D:
+static func create_visual(size: float, teal_core: bool=false) -> MeshInstance3D:
  if shared_mesh==null:_build_resources()
  var mesh:=shared_mesh
  var cube:=MeshInstance3D.new()
  cube.name="GarnetVisual";cube.mesh=shared_mesh;cube.material_override=shared_material
+ if teal_core:
+  cube.material_override=shared_material.duplicate()
+  cube.material_override.set_shader_parameter("core_glow_color",Color(0.035,0.65,0.51))
  cube.scale=Vector3.ONE*size
  var core:=MeshInstance3D.new()
  core.name="VioletCore"
@@ -15,9 +18,9 @@ static func create_visual(size: float) -> MeshInstance3D:
  core.scale=Vector3.ONE*0.34
  var core_material:=StandardMaterial3D.new()
  core_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
- core_material.albedo_color=Color("b476ff")
+ core_material.albedo_color=Color("78ffe0") if teal_core else Color("b476ff")
  core_material.emission_enabled=true
- core_material.emission=Color("a259ff")
+ core_material.emission=Color("21e3c2") if teal_core else Color("a259ff")
  core_material.emission_energy_multiplier=1.6
  core.material_override=core_material
  core.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -46,9 +49,9 @@ static func create_visual(size: float) -> MeshInstance3D:
  particle_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
  particle_material.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
  particle_material.vertex_color_use_as_albedo=true
- particle_material.albedo_color=Color("aa54ed")
+ particle_material.albedo_color=Color("62eed5") if teal_core else Color("aa54ed")
  particle_material.emission_enabled=true
- particle_material.emission=Color("7430c7")
+ particle_material.emission=Color("16bba6") if teal_core else Color("7430c7")
  particle_mesh.material=particle_material
  particles.mesh=particle_mesh
  var fade:=Gradient.new()
@@ -57,6 +60,18 @@ static func create_visual(size: float) -> MeshInstance3D:
  particles.color_ramp=fade
  particles.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
  cube.add_child(particles)
+ return cube
+
+static func create_body(size: float, teal_core: bool=false, layer: int=8) -> RigidBody3D:
+ var cube:=RigidBody3D.new()
+ cube.collision_layer=layer;cube.collision_mask=layer
+ cube.mass=0.2;cube.continuous_cd=true;cube.linear_damp=0.6;cube.angular_damp=0.8
+ var physics:=PhysicsMaterial.new()
+ physics.friction=0.8;physics.bounce=0.18;cube.physics_material_override=physics
+ var collision:=CollisionShape3D.new()
+ var shape:=BoxShape3D.new();shape.size=Vector3.ONE*size;collision.shape=shape
+ cube.add_child(collision)
+ cube.add_child(create_visual(size,teal_core))
  return cube
 
 static func _build_resources() -> void:
